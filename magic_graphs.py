@@ -16,8 +16,18 @@ def calc_incident_beam_magic(source_position, tp_position, sample_position):
     incident_beam = v1 + e1 * sc.norm(v2)
     return incident_beam
 
-def calc_position(detector_position, detector_event_position_local):
-    position = detector_position.to(unit='m', copy=False) + detector_event_position_local.to(unit='m', copy=False)
+def calc_position(detector_position, detector_event_position_local, gamma_detector_a):
+
+    zero_o = sc.sin(sc.zeros_like(gamma_detector_a))
+    one_o = sc.cos(sc.zeros_like(gamma_detector_a))
+    m_gamma = [
+        [sc.cos(gamma_detector_a), zero_o, sc.sin(gamma_detector_a)],
+        [zero_o, one_o, zero_o],
+        [-sc.sin(gamma_detector_a), zero_o, sc.cos(gamma_detector_a)],
+    ]
+    rotation_gamma = get_sc_rotation_matrix(m_gamma)
+    position_rotated = rotation_gamma * detector_event_position_local.to(unit='m', copy=False)
+    position = detector_position.to(unit='m', copy=False) + position_rotated
     return position
 
 def calc_detector_event_position_local(detector_pixel_gamma_local, detector_pixel_vertical_local, detector_radius):
