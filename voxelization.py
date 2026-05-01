@@ -35,10 +35,10 @@ class DetectorA:
 
     r_d: float = 1.000
     r_vs: float = 0.530
-    a_t = 0.252863
-    b_t = 0.416524
-    a_b = -0.722903
-    b_b = -1.077999
+    a_t: float = 0.252863
+    b_t: float = 0.416524
+    a_b: float = -0.722903
+    b_b: float = -1.077999
 
     omega_vs: float = numpy.radians(-6.065)
     delta_gamma_vs: float = numpy.radians(1.05)
@@ -160,17 +160,13 @@ class DetectorA:
         x_e,
         z_e,
     ):
-        r_slice = (
-            numpy.sqrt(
-                numpy.square(self.r_d)
-                + numpy.square(self.r_vs)
-                + 2 * self.r_d * self.r_vs * numpy.cos(self.omega_vs)
-            )
-            - self.r_d
-        )
+        r_sq = numpy.square(x_e) + numpy.square(z_e)
         x_c = (
-            numpy.sqrt(numpy.square(x_e) + numpy.square(z_e)) - self.r_d
-        ) / (r_slice)
+            numpy.sqrt(
+                r_sq - numpy.square(self.r_d * numpy.sin(self.omega_vs))
+            )
+            - self.r_d * numpy.cos(self.omega_vs)
+        ) / self.r_vs
         return x_c
 
     def _calc_n_vsac_by_xyz(
@@ -191,11 +187,17 @@ class DetectorA:
         n_a = numpy.floor(self.N_a * y_a).astype(int)
 
         gamma = numpy.atan2(x_e, z_e)
-        delta_gamma_prime = numpy.asin(numpy.sin(-self.omega_vs) * x_c)
-
-        z_vs = (gamma - self.gamma_d + delta_gamma_prime) / (
-            self.N_vs * self.delta_gamma_vs
+        r_sq = numpy.square(x_e) + numpy.square(z_e)
+        delta_gamma_prime = numpy.asin(
+            numpy.sin(self.omega_vs) * x_c * self.r_vs / numpy.sqrt(r_sq)
         )
+
+        z_vs = (
+            gamma
+            - self.gamma_d
+            - delta_gamma_prime
+            + self.delta_gamma_vs * 0.5
+        ) / (self.N_vs * self.delta_gamma_vs)
         n_vs = numpy.floor(2 * self.N_vs * z_vs).astype(int)
         return (
             n_vs,
@@ -203,7 +205,7 @@ class DetectorA:
             n_c,
         )
 
-    def calc_id_by_xyz(self, np_xyz, flag_testing: bool = False):
+    def calc_id_by_xyz(self, np_xyz):
         (
             n_vs,
             n_a,
@@ -211,16 +213,6 @@ class DetectorA:
         ) = self._calc_n_vsac_by_xyz(
             np_xyz,
         )
-        if flag_testing:
-            func_calc_chi_sq = lambda n_vs, n_a, n_c: self._calc_chi_sq(
-                np_xyz,
-                n_vs,
-                n_a,
-                n_c,
-            )
-            n_vs, n_a, n_c = self._calc_around(
-                n_vs, n_a, n_c, func_calc_chi_sq
-            )
         np_id = self._calc_id_by_n_vsac(
             n_vs,
             n_a,
@@ -228,80 +220,6 @@ class DetectorA:
         )
 
         return np_id
-
-    def _calc_chi_sq(
-        self,
-        np_xyz,
-        n_vs,
-        n_a,
-        n_c,
-    ):
-
-        np_xyz_0 = self._calc_xyz_by_n_vsac(
-            n_vs,
-            n_a,
-            n_c,
-        )
-        chi_sq = numpy.square(np_xyz_0 - np_xyz).sum()
-        return chi_sq
-
-    def _calc_around(
-        self,
-        n_vs,
-        n_a,
-        n_c,
-        func_calc_chi_sq,
-    ):
-        l_shift = [
-            (0, 0, 0),
-            (-2, -1, -1),
-            (0, -1, -1),
-            (-2, 0, -1),
-            (-2, -1, 0),
-            (0, 0, -1),
-            (0, -1, 0),
-            (-2, 0, 0),
-            (2, 1, 1),
-            (0, 1, 1),
-            (2, 0, 1),
-            (2, 1, 0),
-            (0, 0, 1),
-            (0, 1, 0),
-            (2, 0, 0),
-        ]
-        l_chi_sq = []
-        for shift in l_shift:
-            n_vs_t, n_a_t, n_c_t = (
-                n_vs + shift[0],
-                n_a + shift[1],
-                n_c + shift[2],
-            )
-            # flag_vs = n_vs_t >= 0 and n_vs_t < 2 * N_vs
-            # flag_a = n_a_t >= 0 and n_a_t < N_a
-            # flag_c = n_c_t >= 0 and n_c_t < N_c
-            # flag = flag_vs and flag_c and flag_a
-            # if flag:
-            l_chi_sq.append(func_calc_chi_sq(n_vs_t, n_a_t, n_c_t))
-        if len(l_chi_sq) == 0:
-            pass
-        arg_min = numpy.argmin(l_chi_sq)
-        if arg_min != 0:
-            shift = l_shift[arg_min]
-            n_vs_t, n_a_t, n_c_t = (
-                n_vs + shift[0],
-                n_a + shift[1],
-                n_c + shift[2],
-            )
-            n_vs_o, n_a_o, n_c_o = self._calc_around(
-                n_vs_t,
-                n_a_t,
-                n_c_t,
-                func_calc_chi_sq,
-            )
-        else:
-            n_vs_o, n_a_o, n_c_o = n_vs, n_a, n_c
-
-        return n_vs_o, n_a_o, n_c_o
 
 
 def voxelization_of_mcstas_events_for_detector_a(
@@ -341,3 +259,6 @@ def test_calc_id():
             print("Output: ", n_vs, n_a, n_c)
             assert False
     assert True
+
+
+test_calc_id()
