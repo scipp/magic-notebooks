@@ -1,6 +1,7 @@
 import scipp as sc
 import numpy
 import h5py
+import voxelization
 
 
 def read_h5_to_dict(f_nexus):
@@ -57,12 +58,23 @@ def read_h5_to_dict(f_nexus):
         gamma_detector_a = float(
             simulation_param["detector_a_gamma"][()][0].decode("ascii")
         )
+        omega_vs = float(
+            simulation_param["omega_casette"][()][0].decode("ascii")
+        )
         neutron_up = simulation_param["isFlip"][()]
 
-        if "abs_logger_layers_dat_list_p_x_y_z_vx_vy_vz_t_id" in l_data:
+        if "abs_logger_layers_dat_list_p_x_y_z_vx_vy_vz_t" in l_data:
             data_events = data[
-                "abs_logger_layers_dat_list_p_x_y_z_vx_vy_vz_t_id"
+                "abs_logger_layers_dat_list_p_x_y_z_vx_vy_vz_t"
             ]["events"][()]
+
+            data_events, np_id, np_xyz_voxel = (
+                voxelization.voxelization_of_mcstas_events_for_detector_a(
+                    data_events,
+                    numpy.radians(omega_vs),
+                    numpy.radians(gamma_detector_a),
+                )
+            )
             da = sc.DataArray(
                 data=sc.array(
                     dims=["event"],
@@ -90,25 +102,33 @@ def read_h5_to_dict(f_nexus):
                         dims=[
                             "event",
                         ],
+                        values=np_xyz_voxel,
+                        unit="m",
+                    ),
+                    "detector_event_position_local_mcstas": sc.vectors(
+                        dims=[
+                            "event",
+                        ],
                         values=data_events[:, 1:4],
                         unit="m",
                     ),
                     "velocity_local": sc.vectors(
-                       dims=[
-                           "event",
-                       ],
-                       values=data_events[:, 4:7],
-                       unit="m/s",
+                        dims=[
+                            "event",
+                        ],
+                        values=data_events[:, 4:7],
+                        unit="m/s",
                     ),
                     "toa": sc.array(
                         dims=["event"], values=data_events[:, 7], unit="s"
                     ),
                     "voxel_ID_detector_a": sc.array(
-                        dims=["event"], values=numpy.round(data_events[:, 8],0).astype(int),
+                        dims=["event"],
+                        values=np_id,
                     ),
-                    "gamma_detector_a": sc.scalar(gamma_detector_a, unit="deg.").to(
-                        unit="rad", copy=False
-                    ),
+                    "gamma_detector_a": sc.scalar(
+                        gamma_detector_a, unit="deg."
+                    ).to(unit="rad", copy=False),
                     "sample_omega": sc.scalar(sample_omega, unit="deg.").to(
                         unit="rad", copy=False
                     ),
