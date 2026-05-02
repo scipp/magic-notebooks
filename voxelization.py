@@ -2,9 +2,9 @@
 
 Parameters of the detector A
 
-Distances of vertical segmeh
+Distances of vertical segment
 a_t = 252.863 mm.
-b_t = 416.524 mm.
+b_t = 416.545 mm.
 a_b = -722.903 mm.
 b_b = -1077.999 mm.
 
@@ -36,7 +36,7 @@ class DetectorA:
     r_d: float = 1.000
     r_vs: float = 0.530
     a_t: float = 0.252863
-    b_t: float = 0.416524
+    b_t: float = 0.416545
     a_b: float = -0.722903
     b_b: float = -1.077999
 
@@ -243,7 +243,7 @@ def voxelization_of_mcstas_events_for_detector_a(
 
 
 def test_calc_id():
-    N_ID_max = 120 * 32 * 60
+    N_ID_max = 128 * 32 * 120
     omega_vs = numpy.radians(-10)
     for val_id in range(1, N_ID_max):
         print(f"{100*val_id/(N_ID_max-1):8.2f}%", end="\r")
