@@ -52,9 +52,24 @@ def read_h5_to_dict(f_nexus):
         d_out["components"] = d_components
 
         simulation_param = fid["entry1"]["simulation"]["Param"]
-        sample_omega = float(
-            simulation_param["sample_rotation_y"][()][0].decode("ascii")
-        )
+        try:
+            sample_omega = float(
+                simulation_param["sample_omega"][()][0].decode("ascii")
+            )
+        except:
+            sample_omega = 0.
+        try:
+            sample_chi = float(
+                simulation_param["sample_chi"][()][0].decode("ascii")
+            )
+        except:
+            sample_chi = 0.
+        try:
+            sample_phi = float(
+                simulation_param["sample_phi"][()][0].decode("ascii")
+            )
+        except:
+            sample_phi = 0.
         gamma_detector_a = float(
             simulation_param["detector_a_gamma"][()][0].decode("ascii")
         )
@@ -68,7 +83,7 @@ def read_h5_to_dict(f_nexus):
                 "abs_logger_layers_dat_list_p_x_y_z_vx_vy_vz_t"
             ]["events"][()]
 
-            data_events, np_id, np_xyz_voxel = (
+            data_events, np_id, np_xyz_voxel, np_vs, np_a, np_c = (
                 voxelization.voxelization_of_mcstas_events_for_detector_a(
                     data_events,
                     numpy.radians(omega_vs),
@@ -126,16 +141,28 @@ def read_h5_to_dict(f_nexus):
                         dims=["event"],
                         values=np_id,
                     ),
+                    "voxel_ID_VS_detector_a": sc.array(
+                        dims=["event"],
+                        values=np_vs,
+                    ),
+                    "voxel_ID_a_detector_a": sc.array(
+                        dims=["event"],
+                        values=np_a,
+                    ),
+                    "voxel_ID_c_detector_a": sc.array(
+                        dims=["event"],
+                        values=np_c,
+                    ),
                     "gamma_detector_a": sc.scalar(
                         gamma_detector_a, unit="deg."
                     ).to(unit="rad", copy=False),
                     "sample_omega": sc.scalar(sample_omega, unit="deg.").to(
                         unit="rad", copy=False
                     ),
-                    "sample_chi": sc.scalar(0.0, unit="deg.").to(
+                    "sample_chi": sc.scalar(sample_chi, unit="deg.").to(
                         unit="rad", copy=False
                     ),
-                    "sample_phi": sc.scalar(0.0, unit="deg.").to(
+                    "sample_phi": sc.scalar(sample_phi, unit="deg.").to(
                         unit="rad", copy=False
                     ),
                 },

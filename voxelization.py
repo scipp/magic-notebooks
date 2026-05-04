@@ -232,14 +232,14 @@ def voxelization_of_mcstas_events_for_detector_a(
     np_xyz = np_event[:, 1:4]
 
     n_vs, n_a, n_c = det._calc_n_vsac_by_xyz(np_xyz.transpose())
-    flag_1 = numpy.logical_and(n_vs >= 0, n_vs < det.N_vs)
+    flag_1 = numpy.logical_and(n_vs >= 0, n_vs < 2*det.N_vs)
     flag_2 = numpy.logical_and(n_a >= 0, n_a < det.N_a)
     flag_3 = numpy.logical_and(n_c >= 0, n_c < det.N_c)
     flag = numpy.logical_and(numpy.logical_and(flag_1, flag_2), flag_3)
     np_events_reduced = np_event[flag, :]
     np_id = det._calc_id_by_n_vsac(n_vs[flag], n_a[flag], n_c[flag])
     np_xyz_voxels = det.calc_xyz_by_id(np_id).transpose()
-    return np_events_reduced, np_id, np_xyz_voxels
+    return np_events_reduced, np_id, np_xyz_voxels, n_vs[flag], n_a[flag], n_c[flag]
 
 
 def test_calc_id():
