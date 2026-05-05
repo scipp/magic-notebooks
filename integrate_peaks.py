@@ -6,7 +6,8 @@ import magic_graphs
 def naive_integration(da, integration_box, scale:float=1.):
     ls_out = ["# Naive integration\n"]
     da = da.transform_coords(("two_theta","h","k","l"), graph={**magic_graphs.graph_qvec,**magic_graphs.graph_hkl})
-    np_hkl = numpy.array([da.coords["h"].values, da.coords["k"].values, da.coords["l"].values], dtype=float)
+    flag_not_border = ~da.masks['detector_border']
+    np_hkl = numpy.array([da[flag_not_border].coords["h"].values, da[flag_not_border].coords["k"].values, da[flag_not_border].coords["l"].values], dtype=float)
     np_hkl = numpy.unique(numpy.round(np_hkl,0).astype(int),axis=1)
 
 
