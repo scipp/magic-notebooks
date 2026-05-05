@@ -228,7 +228,8 @@ def voxelization_of_mcstas_events_for_detector_a(
     """
     abs_logger_layers_dat_list_p_x_y_z_vx_vy_vz_t_id
     """
-    det = DetectorA(omega_vs=omega_vs, gamma_d=gamma_d)
+    # Here Gamma_d is zero as xyz are defined in coordinate system of arm
+    det = DetectorA(omega_vs=omega_vs, gamma_d=0)
     np_xyz = np_event[:, 1:4]
 
     n_vs, n_a, n_c = det._calc_n_vsac_by_xyz(np_xyz.transpose())
