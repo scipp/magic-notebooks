@@ -2,6 +2,7 @@ import numpy
 import scipy
 from scippneutron.conversion import graph
 import scipp as sc
+from voxelization import calc_local_voxel_position_by_id_of_detector_a, DetectorA
 
 def get_sc_rotation_matrix(r_matrix):
     quternion_r_matrix = scipy.spatial.transform.Rotation.from_matrix(r_matrix).as_quat()
@@ -166,12 +167,44 @@ def calc_unit_cell_parameters_by_b_matrix(b_matrix):
 def calc_norm_q(Q_vec):
     return sc.norm(Q_vec)
 
+def calc_voxel_id_vsac_detector_a(voxel_ID_detector_a):
+    np_id = voxel_ID_detector_a.values
+    det = DetectorA()
+    n_vs, n_a, n_c = det._calc_n_vsac_by_id(np_id)
+    voxel_ID_VS_detector_a = sc.array(
+                        dims=voxel_ID_detector_a.dims,
+                        values=n_vs,
+                    )
+    voxel_ID_a_detector_a = sc.array(
+                        dims=voxel_ID_detector_a.dims,
+                        values=n_a,
+                    )
+    voxel_ID_c_detector_a = sc.array(
+                        dims=voxel_ID_detector_a.dims,
+                        values=n_c,
+                    )
+    return {'voxel_ID_VS_detector_a':voxel_ID_VS_detector_a, 'voxel_ID_a_detector_a':voxel_ID_a_detector_a, 'voxel_ID_c_detector_a':voxel_ID_c_detector_a}
+
+def calc_detector_event_position_local_by_pixel_id(voxel_ID_detector_a, omega_vs_detector_a):
+    np_id = voxel_ID_detector_a.values
+    omega_vs = omega_vs_detector_a.to(unit="rad").value
+    det = DetectorA(omega_vs=omega_vs)
+    np_xyz = det.calc_xyz_by_id(np_id)
+    detector_event_position_local = sc.vectors(
+                        dims=voxel_ID_detector_a.dims,
+                        values=np_xyz.transpose(),
+                        unit="m",
+                    )
+    return detector_event_position_local
+
+    
 scipp_graph = {**graph.beamline.beamline(scatter=True), **graph.tof.elastic_hkl(start='tof')}
 
 graph_qvec = {
     "incident_beam": calc_incident_beam_magic,
     "position": calc_position,
-    "detector_event_position_local": calc_detector_event_position_local,
+    "detector_event_position_local": calc_detector_event_position_local_by_pixel_id,
+    ("voxel_ID_VS_detector_a", "voxel_ID_a_detector_a", "voxel_ID_c_detector_a"):calc_voxel_id_vsac_detector_a,
     "tof": calc_tof,
     "Ltotal": calc_Ltotal,
     "sample_rotation": calc_sample_rotation,

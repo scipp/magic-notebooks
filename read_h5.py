@@ -87,7 +87,6 @@ def read_h5_to_dict(f_nexus):
                 voxelization.voxelization_of_mcstas_events_for_detector_a(
                     data_events,
                     numpy.radians(omega_vs),
-                    numpy.radians(gamma_detector_a),
                 )
             )
             da = sc.DataArray(
@@ -153,6 +152,9 @@ def read_h5_to_dict(f_nexus):
                         dims=["event"],
                         values=np_c,
                     ),
+                    "omega_vs_detector_a": sc.scalar(
+                        omega_vs, unit="deg."
+                    ).to(unit="rad", copy=False),
                     "gamma_detector_a": sc.scalar(
                         gamma_detector_a, unit="deg."
                     ).to(unit="rad", copy=False),

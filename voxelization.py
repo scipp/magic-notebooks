@@ -221,9 +221,17 @@ class DetectorA:
 
         return np_id
 
+def calc_local_voxel_position_by_id_of_detector_a(np_id, omega_vs):
+    """
+    Calculate local position of voxel (center of the phase) by ID number
+    """
+    det = DetectorA(omega_vs=omega_vs, gamma_d=0)
+    np_xyz = det.calc_xyz_by_id(np_id)
+    return np_xyz
+    
 
 def voxelization_of_mcstas_events_for_detector_a(
-    np_event: numpy.ndarray, omega_vs, gamma_d
+    np_event: numpy.ndarray, omega_vs
 ):
     """
     abs_logger_layers_dat_list_p_x_y_z_vx_vy_vz_t_id
