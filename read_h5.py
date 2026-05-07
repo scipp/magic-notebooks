@@ -83,7 +83,7 @@ def read_h5_to_dict(f_nexus):
                 "abs_logger_layers_dat_list_p_x_y_z_vx_vy_vz_t"
             ]["events"][()]
 
-            data_events, np_id, np_xyz_voxel, np_vs, np_a, np_c = (
+            data_events, np_id, _, _, _, _ = (
                 voxelization.voxelization_of_mcstas_events_for_detector_a(
                     data_events,
                     numpy.radians(omega_vs),
@@ -112,13 +112,13 @@ def read_h5_to_dict(f_nexus):
                     "detector_position": sc.vector(
                         detector_position, unit="m"
                     ),
-                    "detector_event_position_local": sc.vectors(
-                        dims=[
-                            "event",
-                        ],
-                        values=np_xyz_voxel,
-                        unit="m",
-                    ),
+                    # "detector_event_position_local": sc.vectors(
+                    #     dims=[
+                    #         "event",
+                    #     ],
+                    #     values=np_xyz_voxel,
+                    #     unit="m",
+                    # ),
                     "detector_event_position_local_mcstas": sc.vectors(
                         dims=[
                             "event",
@@ -140,18 +140,18 @@ def read_h5_to_dict(f_nexus):
                         dims=["event"],
                         values=np_id,
                     ),
-                    "voxel_ID_VS_detector_a": sc.array(
-                        dims=["event"],
-                        values=np_vs,
-                    ),
-                    "voxel_ID_a_detector_a": sc.array(
-                        dims=["event"],
-                        values=np_a,
-                    ),
-                    "voxel_ID_c_detector_a": sc.array(
-                        dims=["event"],
-                        values=np_c,
-                    ),
+                    # "voxel_ID_VS_detector_a": sc.array(
+                    #     dims=["event"],
+                    #     values=np_vs,
+                    # ),
+                    # "voxel_ID_a_detector_a": sc.array(
+                    #     dims=["event"],
+                    #     values=np_a,
+                    # ),
+                    # "voxel_ID_c_detector_a": sc.array(
+                    #     dims=["event"],
+                    #     values=np_c,
+                    # ),
                     "omega_vs_detector_a": sc.scalar(
                         omega_vs, unit="deg."
                     ).to(unit="rad", copy=False),

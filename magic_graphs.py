@@ -197,6 +197,21 @@ def calc_detector_event_position_local_by_pixel_id(voxel_ID_detector_a, omega_vs
                     )
     return detector_event_position_local
 
+def calc_gamma_nu_event(detector_event_position_local, gamma_detector_a):
+    np_xyz = detector_event_position_local.values.transpose()
+    np_norm = numpy.linalg.norm(np_xyz,axis=0)
+    np_gamma = numpy.atan2(np_xyz[0], np_xyz[2]) + gamma_detector_a.to(unit="rad").value
+    np_nu = numpy.asin(np_xyz[1]/np_norm)
+    gamma_event = sc.array(
+        dims=detector_event_position_local.dims, 
+        values=np_gamma, 
+        unit='rad')
+
+    nu_event = sc.array(
+        dims=detector_event_position_local.dims, 
+        values=np_nu, 
+        unit='rad')
+    return {"gamma_event":gamma_event, "nu_event":nu_event, }
     
 scipp_graph = {**graph.beamline.beamline(scatter=True), **graph.tof.elastic_hkl(start='tof')}
 
@@ -205,6 +220,7 @@ graph_qvec = {
     "position": calc_position,
     "detector_event_position_local": calc_detector_event_position_local_by_pixel_id,
     ("voxel_ID_VS_detector_a", "voxel_ID_a_detector_a", "voxel_ID_c_detector_a"):calc_voxel_id_vsac_detector_a,
+    ("gamma_event", "nu_event"): calc_gamma_nu_event,
     "tof": calc_tof,
     "Ltotal": calc_Ltotal,
     "sample_rotation": calc_sample_rotation,
