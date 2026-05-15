@@ -184,14 +184,18 @@ def calc_voxel_id_vsac_detector_a(voxel_ID_detector_a):
                         values=n_c,
                     )
     return {'voxel_ID_VS_detector_a':voxel_ID_VS_detector_a, 'voxel_ID_a_detector_a':voxel_ID_a_detector_a, 'voxel_ID_c_detector_a':voxel_ID_c_detector_a}
+    
 
-def calc_detector_event_position_local_by_pixel_id(voxel_ID_detector_a, omega_vs_detector_a):
-    np_id = voxel_ID_detector_a.values
+def calc_detector_event_position_local_by_pixel_id(voxel_ID_VS_detector_a, voxel_ID_a_detector_a, voxel_ID_c_detector_a, omega_vs_detector_a):
+    np_vs = voxel_ID_VS_detector_a.values
+    np_a = voxel_ID_a_detector_a.values
+    np_c = voxel_ID_c_detector_a.values
     omega_vs = omega_vs_detector_a.to(unit="rad").value
     det = DetectorA(omega_vs=omega_vs)
-    np_xyz = det.calc_xyz_by_id(np_id)
+    np_xyz = det._calc_xyz_by_n_vsac(np_vs, np_a, np_c)
+    # np_xyz = det.calc_xyz_by_id(np_id)
     detector_event_position_local = sc.vectors(
-                        dims=voxel_ID_detector_a.dims,
+                        dims=voxel_ID_VS_detector_a.dims,
                         values=np_xyz.transpose(),
                         unit="m",
                     )
