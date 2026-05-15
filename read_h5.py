@@ -4,31 +4,44 @@ import h5py
 import voxelization
 
 
-def read_h5_to_dict(f_nexus):
+def read_h5_to_dict(
+    f_nexus,
+    s_source: str = "_sourceMantid",
+    s_sample: str = "_sampleMantid",
+    s_detector_a: str = "_arm_detector_a",
+    flag_voxelization: bool = True,
+):
     d_out = {}
     delta_L_deafault = sc.scalar(0.0, unit="m")
     delta_t_default = sc.scalar(3.0, unit="ms").to(unit="s", copy=False)
     with h5py.File(f_nexus) as fid:
         components = fid["entry1"]["instrument"]["components"]
-        l_key_sample = [
-            hh for hh in components.keys() if "_sampleMantid" in hh
-        ]
-        l_key_source = [
-            hh for hh in components.keys() if "_sourceMantid" in hh
-        ]
-        l_key_detector = [
-            hh for hh in components.keys() if "_arm_detector_a" in hh
-        ]
+        l_key_source = [hh for hh in components.keys() if s_source in hh]
+
+        l_key_sample = [hh for hh in components.keys() if s_sample in hh]
+
+        l_key_detector = [hh for hh in components.keys() if s_detector_a in hh]
 
         l_components = components.keys()
 
-        sample = components[l_key_sample[0]]
-        sample_position = sample["Position"][()]
+        flag_source = False
+        if len(l_key_sample) != 0:
+            source = components[l_key_sample[0]]
+            source_position = source["Position"][()]
+            flag_source = True
 
-        detector = components[l_key_detector[0]]
-        detector_position = detector["Position"][()]
-        detector_rotation = detector["Rotation"][()]
-        # detector_radius = float(detector["Geometry"].attrs["radius"])
+        flag_sample = False
+        if len(l_key_sample) != 0:
+            sample = components[l_key_sample[0]]
+            sample_position = sample["Position"][()]
+            flag_sample = True
+
+        flag_detector = False
+        if len(l_key_detector) != 0:
+            detector = components[l_key_detector[0]]
+            detector_position = detector["Position"][()]
+            detector_rotation = detector["Rotation"][()]
+            flag_detector = True
 
         data = fid["entry1"]["data"]  #
         l_data = data.keys()
@@ -43,6 +56,7 @@ def read_h5_to_dict(f_nexus):
                 component, data_component
             )
             d_out[data_name]["component_name"] = component_name
+
         d_components = {}
         for component_name in l_components:
             component = components[component_name]
@@ -52,109 +66,71 @@ def read_h5_to_dict(f_nexus):
         d_out["components"] = d_components
 
         simulation_param = fid["entry1"]["simulation"]["Param"]
-        try:
-            sample_omega = float(
-                simulation_param["sample_omega"][()][0].decode("ascii")
-            )
-        except:
-            sample_omega = 0.
-        try:
-            sample_chi = float(
-                simulation_param["sample_chi"][()][0].decode("ascii")
-            )
-        except:
-            sample_chi = 0.
-        try:
-            sample_phi = float(
-                simulation_param["sample_phi"][()][0].decode("ascii")
-            )
-        except:
-            sample_phi = 0.
-        gamma_detector_a = float(
-            simulation_param["detector_a_gamma"][()][0].decode("ascii")
-        )
-        omega_vs = float(
-            simulation_param["omega_casette"][()][0].decode("ascii")
-        )
-        neutron_up = simulation_param["isFlip"][()]
-
-        if "abs_logger_layers_dat_list_p_x_y_z_vx_vy_vz_t" in l_data:
-            data_events = data[
-                "abs_logger_layers_dat_list_p_x_y_z_vx_vy_vz_t"
-            ]["events"][()]
-
-            data_events, np_id, _, _, _, _ = (
-                voxelization.voxelization_of_mcstas_events_for_detector_a(
-                    data_events,
-                    numpy.radians(omega_vs),
+        d_simulation_param = {}
+        for s_key in simulation_param.keys():
+            try:
+                d_simulation_param[s_key] = float(
+                    simulation_param[s_key][()][0].decode("ascii")
                 )
-            )
+            except:
+                pass
+        d_out["simulation_parameters"] = d_simulation_param
+
+        sample_omega = d_simulation_param.get("sample_omega", 0.0)
+        sample_chi = d_simulation_param.get("sample_chi", 0.0)
+        sample_phi = d_simulation_param.get("sample_phi", 0.0)
+        gamma_detector_a = d_simulation_param.get("gamma_detector_a", 0.0)
+        omega_vs = d_simulation_param.get("omega_casette", 0.0)
+
+        # neutron_up = simulation_param["isFlip"][()]
+        l_detector_a_key = [
+            key
+            for i_key, key in enumerate(l_data)
+            if "abs_logger_layers_dat_list"
+        ]
+        if len(l_detector_a_key) > 0:
+            s_key = l_detector_a_key[0]
+            data_events = data[s_key]["events"][()]
+            if flag_voxelization:
+                data_events, np_id, _, _, _, _ = (
+                    voxelization.voxelization_of_mcstas_events_for_detector_a(
+                        data_events,
+                        numpy.radians(omega_vs),
+                    )
+                )
+            l_param = s_key.split("_")[5:]
+            ind_p = l_param.index("p")
+            ind_x = l_param.index("x")
+            ind_z = l_param.index("z")
+            ind_t = l_param.index("t")
+
             da = sc.DataArray(
                 data=sc.array(
                     dims=["event"],
-                    values=data_events[:, 0],
-                    variances=(data_events[:, 0] ** 2),
+                    values=data_events[:, ind_p],
+                    variances=(data_events[:, ind_p] ** 2),
                 ),
                 coords={
                     # "detector_radius": sc.scalar(detector_radius, unit="m"),
                     "delta_L": delta_L_deafault,
                     "delta_t": delta_t_default,
-                    "source_position": sc.vector(
-                        value=d_components["arm_w6"]["position"], unit="m"
-                    ),
-                    "tp_position": sc.vector(
-                        value=d_components["arm_egs2"]["position"], unit="m"
-                    ),
-                    "ideal_sample_position": sc.vector(
-                        sample_position, unit="m"
-                    ),
                     "sample_offset": sc.vector([0.0, 0.0, 0.0], unit="m"),
                     "detector_position": sc.vector(
                         detector_position, unit="m"
                     ),
-                    # "detector_event_position_local": sc.vectors(
-                    #     dims=[
-                    #         "event",
-                    #     ],
-                    #     values=np_xyz_voxel,
-                    #     unit="m",
-                    # ),
                     "detector_event_position_local_mcstas": sc.vectors(
                         dims=[
                             "event",
                         ],
-                        values=data_events[:, 1:4],
+                        values=data_events[:, ind_x : (ind_z + 1)],
                         unit="m",
                     ),
-                    "velocity_local": sc.vectors(
-                        dims=[
-                            "event",
-                        ],
-                        values=data_events[:, 4:7],
-                        unit="m/s",
-                    ),
                     "toa": sc.array(
-                        dims=["event"], values=data_events[:, 7], unit="s"
+                        dims=["event"], values=data_events[:, ind_t], unit="s"
                     ),
-                    "voxel_ID_detector_a": sc.array(
-                        dims=["event"],
-                        values=np_id,
+                    "omega_vs_detector_a": sc.scalar(omega_vs, unit="deg.").to(
+                        unit="rad", copy=False
                     ),
-                    # "voxel_ID_VS_detector_a": sc.array(
-                    #     dims=["event"],
-                    #     values=np_vs,
-                    # ),
-                    # "voxel_ID_a_detector_a": sc.array(
-                    #     dims=["event"],
-                    #     values=np_a,
-                    # ),
-                    # "voxel_ID_c_detector_a": sc.array(
-                    #     dims=["event"],
-                    #     values=np_c,
-                    # ),
-                    "omega_vs_detector_a": sc.scalar(
-                        omega_vs, unit="deg."
-                    ).to(unit="rad", copy=False),
                     "gamma_detector_a": sc.scalar(
                         gamma_detector_a, unit="deg."
                     ).to(unit="rad", copy=False),
@@ -169,6 +145,30 @@ def read_h5_to_dict(f_nexus):
                     ),
                 },
             )
+            if flag_voxelization:
+                da.coords["voxel_ID_detector_a"] = sc.array(
+                    dims=["event"],
+                    values=np_id,
+                )
+
+            if "arm_w6" in d_components.keys():
+                da.coords["source_position"] = sc.vector(
+                    value=d_components["arm_w6"]["position"], unit="m"
+                )
+            elif flag_source:
+                da.coords["source_position"] = sc.vector(
+                    value=source_position, unit="m"
+                )
+
+            if "arm_egs2" in d_components.keys():
+                da.coords["tp_position"] = sc.vector(
+                    value=d_components["arm_egs2"]["position"], unit="m"
+                )
+            if flag_sample:
+                da.coords["ideal_sample_position"] = sc.vector(
+                    sample_position, unit="m"
+                )
+
             d_out["data_event"] = da
         if "tof_egs2_1_plot" in d_out.keys():  # cave monitor
             data_monitor = d_out["tof_egs2_1_plot"]
@@ -228,8 +228,14 @@ def read_data_component_to_dict(component, data_component):
 
 def read_psd_to_dict(component, data_component):
     d_out = read_common_to_dict(component, data_component)
-    d_out["X_position"] = data_component["X_position__cm_"][()]
-    d_out["Y_position"] = data_component["Y_position__cm_"][()]
+    if "X_position__cm_" in data_component.keys():
+        d_out["X_position"] = data_component["X_position__cm_"][()]
+    if "Y_position__cm_" in data_component.keys():
+        d_out["Y_position"] = data_component["Y_position__cm_"][()]
+    if "X_divergence__deg_" in data_component.keys():
+        d_out["X_divergence"] = data_component["X_divergence__deg_"][()]
+    if "Y_divergence__deg_" in data_component.keys():
+        d_out["Y_divergence"] = data_component["Y_divergence__deg_"][()]
     return d_out
 
 
