@@ -4,13 +4,14 @@ from ipyfilechooser import FileChooser
 import ipywidgets as widgets
 
 fc = FileChooser(
+    # '/Users/iuriikibalin/Downloads/C60_n3',
     '/Users/iuriikibalin/Repositories/magic/run_folder',
     title='Select NEXuS file with Single crystal diffraction data',
     select_default=False,
 )
 
 fc_vanadium = FileChooser(
-    '/Users/iuriikibalin/Repositories/magic/run_folder',
+    '/Users/iuriikibalin/Downloads/Vanadium_n3',
     title='Select NEXuS file with Vanadium measurements for normatlization (optional)',
     select_default=False,
 )
@@ -35,7 +36,7 @@ hide_output_data_button = widgets.Button(
 
 
 state_dropdown = widgets.Dropdown(
-    options=['data_event', 'data_cave_monitor', 'data_event_vanadium', 'data_cave_monitor_vanadium', 'data_event_normalized_per_monitor', 'data_event_normalized_per_vanadium', 'data_peaks'],
+    options=['data_event', 'data_event_hist', 'data_cave_monitor', 'data_event_vanadium', 'data_event_vanadium_hist', 'data_cave_monitor_vanadium', 'data_event_normalized_per_monitor', 'data_event_normalized_per_vanadium', 'data_peaks'],
     value='data_event',
     description='',
     disabled=False,
@@ -61,12 +62,19 @@ hide_peaks_button = widgets.Button(
 )
 
 
-# New button (initially hidden)
 find_peaks_button = widgets.Button(
     description="Find Peaks",
     button_style='success',
     layout=widgets.Layout(display='none'),  # hidden initially
 )
+
+find_peaks_hist_button = widgets.Button(
+    description="Find Peaks Hist",
+    button_style='success',
+    layout=widgets.Layout(display='none'),  # hidden initially
+)
+
+
 
 fig_rbuttons = widgets.RadioButtons(
     options=['3D Laue Pattern', '2D Pattern', 'Monitor Data', '3D Normalization Data', '2D Normalization Data'],
@@ -196,3 +204,23 @@ ui_angles = widgets.HBox(
     layout=widgets.Layout(align_items='center')
 )
 
+spinner = widgets.HTML(
+    """
+    <div style="
+        border: 6px solid #f3f3f3;
+        border-top: 6px solid #3498db;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        animation: spin 1s linear infinite;
+        margin: 10px auto;
+    "></div>
+
+    <style>
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    </style>
+    """
+)

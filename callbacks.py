@@ -5,9 +5,11 @@ import plopp
 import scipp as sc
 import numpy
 import pandas as pd
+from scipy.ndimage import label, center_of_mass, sum as ndi_sum
 
 from IPython.display import display, clear_output, HTML
 
+import matplotlib.pyplot as plt
 
 import magic_scipp
 import read_h5
@@ -21,6 +23,7 @@ def load_file(b):
         clear_output()
         peaks_output.clear_output()
         indexation_output.clear_output()
+        display(spinner)
 
         STATE.clear()
 
@@ -30,7 +33,8 @@ def load_file(b):
         display_da_button.layout.display = 'none'
         hide_output_data_button.layout.display = 'none'
         norm_rbuttons.layout.display = 'none'
-        find_peaks_button.layout.display = 'none'  # hide until plot is ready
+        find_peaks_button.layout.display = 'none'  
+        find_peaks_hist_button.layout.display = 'none'  
         cell_a.layout.display = 'none'
         cell_b.layout.display = 'none'
         cell_c.layout.display = 'none'
@@ -61,6 +65,7 @@ def load_file(b):
                 STATE.data_cave_monitor_vanadium = d_out['data_cave_monitor']
             except Exception as e:
                 print(f"Error reading file: {e}")
+        clear_output()
             
         display_data(b)
         fig_rbuttons.layout.display = 'inline-block'
@@ -70,11 +75,13 @@ def load_file(b):
         hide_output_data_button.layout.display = 'inline-block'
         norm_rbuttons.layout.display = 'inline-block'
         find_peaks_button.layout.display = 'inline-block'
-
+        find_peaks_hist_button.layout.display = 'inline-block'
+        
 
 def display_data(b):
     with output_data:
         clear_output()
+        display(spinner)
 
         # Create plopp figure
         print(fig_rbuttons.value)
@@ -87,7 +94,9 @@ def display_data(b):
         elif fig_rbuttons.value == '2D Pattern':
             data_event = STATE.data_event
             da_2d = operations_with_da.da_to_2d_hist(data_event, factor_border=0.07)
-            fig = plopp.inspector(da_2d, dim='toa', orientation='vertical', logc=False, mode='rectangle')
+            STATE.data_event_hist = da_2d
+            rad_to_deg = da_2d.assign_coords(gamma_event=da_2d.coords["gamma_event"].to(unit="deg"), nu_event=da_2d.coords["nu_event"].to(unit="deg"))
+            fig = plopp.inspector(rad_to_deg, dim='toa', orientation='vertical', logc=False, mode='rectangle', autoscale=True)
         elif fig_rbuttons.value == '3D Normalization Data':
             data_event = STATE.data_event_vanadium
             da_laue = operations_with_da.da_to_laue_hist(data_event, factor_border=0.07)
@@ -96,7 +105,9 @@ def display_data(b):
         elif fig_rbuttons.value == '2D Normalization Data':
             data_event = STATE.data_event_vanadium
             da_2d = operations_with_da.da_to_2d_hist(data_event, factor_border=0.07)
-            fig = plopp.inspector(da_2d, dim='toa', orientation='vertical', logc=False, mode='rectangle')
+            STATE.data_event_hist_vanadium = da_2d
+            rad_to_deg = da_2d.assign_coords(gamma_event=da_2d.coords["gamma_event"].to(unit="deg"), nu_event=da_2d.coords["nu_event"].to(unit="deg"))
+            fig = plopp.inspector(rad_to_deg, dim='toa', orientation='vertical', logc=False, mode='rectangle', autoscale=False)
         elif fig_rbuttons.value == 'Monitor Data':
             data_cave_monitor = STATE.data_cave_monitor
             fig = data_cave_monitor.hist(toa=101).plot()
@@ -104,7 +115,8 @@ def display_data(b):
             flag_display_center = False
             fig, ax = plt.subplots()
             ax.plot([1, 2, 3], [4, 5, 6])
-            
+
+        clear_output()
         if flag_display_center:
             display_center(fig)
         else:
@@ -119,6 +131,8 @@ def display_da_data(b):
 def run_peak_finder(b):
     with peaks_output:
         clear_output()
+        display(spinner)
+        
         indexation_output.clear_output()
         cell_a.layout.display = 'none' 
         cell_b.layout.display = 'none' 
@@ -148,6 +162,7 @@ def run_peak_finder(b):
         peaks = find_peaks(data_event)
 
         STATE.data_peaks = peaks
+        clear_output()
         display_peaks(b)
         cell_a.layout.display = 'inline-block' 
         cell_b.layout.display = 'inline-block' 
@@ -160,11 +175,84 @@ def run_peak_finder(b):
         hide_peaks_button.layout.display = 'inline-block'
 
 
+def run_peak_finder_hist(b):
+    with peaks_output:
+        clear_output()
+        display(spinner)
+
+        indexation_output.clear_output()
+        cell_a.layout.display = 'none' 
+        cell_b.layout.display = 'none' 
+        cell_c.layout.display = 'none' 
+        cell_alpha.layout.display = 'none' 
+        cell_beta.layout.display = 'none' 
+        cell_gamma.layout.display = 'none' 
+        indexation_button.layout.display = 'none' 
+        display_peaks_button.layout.display = 'none'
+        hide_peaks_button.layout.display = 'none'
+
+        
+        if norm_rbuttons.value == "No Normalization":
+            data_event = STATE.data_event # b.data_event
+        elif norm_rbuttons.value == "Per Monitor":
+            if STATE.data_event_normalized_per_monitor is None:
+                calc_normalization_per_monitor()
+            data_event = STATE.data_event_normalized_per_monitor # b.data_event
+        elif norm_rbuttons.value == "Per Vanadium":
+            if STATE.data_event_normalized_per_vanadium is None:
+                calc_normalization_per_vanadium()
+            data_event = STATE.data_event_normalized_per_vanadium # b.data_event
+        else:
+            print("Something is wrong in run_peak_finder_hist")
+            return
+        
+        peak_labels, peak_number = find_peaks_hist(STATE.data_event_hist)
+    
+        np_data = STATE.data_event_hist.values
+        maskAll = numpy.ones(np_data.transpose().shape, dtype=bool)
+        masks = {'All': maskAll}
+        for i in range(1, peak_number+1):
+            masks[f"Peak {i}"]=(peak_labels == i).transpose()
+    
+        data3d = np_data.transpose()        # shape (Z, Y, X)
+        base_img = data3d.sum(axis=-1)
+
+        mask_list = widgets.Select(
+            options=list(masks.keys()),
+            description="Masks",
+            layout=widgets.Layout(width="200px", height="200px")
+        )
+        clear_output()
+        
+        fig, ax = plt.subplots(figsize=(12, 7))
+        im = ax.imshow(base_img, cmap="Purples", aspect="auto")
+        ax.set_title("Projection (sum over last axis)")
+        plt.colorbar(im, ax=ax, fraction=0.046)
+        plt.tight_layout()
+
+        def update(change):
+            name = change["new"]
+            mask = masks[name]
+
+            masked_img = (data3d * mask).sum(axis=-1)
+            im.set_data(masked_img)
+            im.set_clim(vmin=masked_img.min(), vmax=masked_img.max())
+
+            ax.set_title(f"Masked: {name} {x:.1f} {y:.1f} {z:.1f}")
+
+            fig.canvas.draw_idle()
+
+        mask_list.observe(update, names="value")
+
+        plt.show()
+        display(mask_list)
 
 
 def display_peaks(b):
     with peaks_output:
         clear_output()
+        display(spinner)
+
         print("Peaks:")
         data_peaks = STATE.data_peaks
         np_q = data_peaks.coords['Q_vec_rot'].values
@@ -183,11 +271,13 @@ def display_peaks(b):
         pd_peaks = pd.DataFrame(d_in)
         fig = plopp.scatter3d(data_peaks, pos='Q_vec_rot', cbar=True, size=1, perspective=False)
         
+        clear_output()
         display(pd_peaks, fig)
 
 def indexate_peaks(b):
     with indexation_output:
         clear_output()
+        display(spinner)
 
         da_peaks = STATE.data_peaks
         
@@ -247,6 +337,7 @@ def indexate_peaks(b):
         cell_beta.value = unit_cell[4].value
         cell_gamma.value = unit_cell[5].value
         STATE.data_peaks = da_peaks.transform_coords(("h","k","l","h_reduced","k_reduced","l_reduced"), graph=magic_graphs.graph_hkl)  
+        clear_output()
         display_peaks(b)
 
 
@@ -280,11 +371,8 @@ def randomly_take_n_events(da, n):
     
 
 def find_peaks(data_event):
-    """
-    Replace this with your real peak-finding algorithm.
-    Must return something displayable (DataFrame, dict, scipp table, etc.)
-    """
-    data_event_random = randomly_take_n_events(data_event, 100000)
+    """Find peaks by events"""
+    data_event_random = randomly_take_n_events(data_event, 500000)
     
     data_event_random = data_event_random.transform_coords(("Q_vec_rot",), graph=magic_graphs.graph_qvec)
     
@@ -301,6 +389,28 @@ def find_peaks(data_event):
     return da_peaks
 
 
+def find_peaks_hist(data_event_hist):
+    """Find peaks by events"""
+    np_data = data_event_hist.values
+    np_flag_peaks = np_data > 0.1*(np_data.max()-np_data.min())+np_data.min()
+    peak_labels, peak_number = label(np_flag_peaks)
+    print(f"Number of peaks is {peak_number}")
+    peak_centers = center_of_mass(np_data, peak_labels, range(1, peak_number+1))
+
+    # bin_gamma = data_event_hist.coords['gamma_event']
+    # ind_gamma_centers = [hh[2] for hh in peak_centers]
+    # gamma_centers = numpy.interp(ind_gamma_centers, range(bin_gamma.size), bin_gamma.values)
+
+    # bin_nu = data_event_hist.coords['nu_event']
+    # ind_nu_centers = [hh[1] for hh in peak_centers]
+    # nu_centers = numpy.interp(ind_nu_centers, range(bin_nu.size), bin_nu.values)
+
+    # bin_toa = data_event_hist.coords['toa']
+    # ind_toa_centers = [hh[0] for hh in peak_centers]
+    # toa_centers = numpy.interp(ind_toa_centers, range(bin_toa.size), bin_toa.values)
+    
+    return peak_labels, peak_number
+    
     
 def display_center(*graphs):
     return display(widgets.VBox(graphs, layout=widgets.Layout(align_items='center')))

@@ -40,17 +40,23 @@ def normalize_per_cave_monitor(da_q_event, da_cm, factor=0.1):
 
 def da_to_2d_hist(da, factor_border:float = 0.07):
     da = da.transform_coords(("gamma_event",'nu_event', 'voxel_ID_a_detector_a'), graph=magic_graphs.graph_qvec, rename_dims=False)
-    delta_gamma_event = sc.scalar(1.05,unit='deg').to(unit='rad') / 10
+    delta_gamma_event = sc.scalar(0.15,unit='deg').to(unit='rad') 
     gamma_min = da.coords['gamma_event'].min()
     gamma_max = da.coords['gamma_event'].max()
     num_gamma = int(((gamma_max-gamma_min)/delta_gamma_event).value)
     bin_gamma = sc.linspace('gamma_event', gamma_min, gamma_max, num=num_gamma)
-    bin_ID_a = sc.linspace('voxel_ID_a_detector_a', 0, 127, num=128).to(dtype='int')
-    delta_toa = sc.scalar(1e-4, unit='s')
+
+    delta_nu_event = sc.scalar(0.333,unit='deg').to(unit='rad') 
+    nu_min = da.coords['nu_event'].min()
+    nu_max = da.coords['nu_event'].max()
+    num_nu = int(((nu_max-nu_min)/delta_nu_event).value)
+    bin_nu = sc.linspace('nu_event', nu_min, nu_max, num=num_nu)
+
+    delta_toa = sc.scalar(0.1e-3, unit='s')
     toa_min = da.coords['toa'].min()
     toa_max = da.coords['toa'].max()
     num_toa = int(((toa_max-toa_min)/delta_toa).value)
     bin_toa = sc.linspace('toa', toa_min, toa_max, num=num_toa)
-    data_hist = da.hist(toa=bin_toa, voxel_ID_a_detector_a=bin_ID_a, gamma_event=bin_gamma)
+    data_hist = da.hist(toa=bin_toa, nu_event=bin_nu, gamma_event=bin_gamma)
     return data_hist
     

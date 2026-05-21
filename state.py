@@ -6,8 +6,10 @@ class AppState:
 
     def clear(self):
         self.data_event = None
+        self.data_event_hist = None
         self.data_cave_monitor = None
         self.data_event_vanadium = None
+        self.data_event_hist_vanadium = None
         self.data_cave_monitor_vanadium = None
         self.data_event_normalized_per_monitor = None
         self.data_event_normalized_per_vanadium = None
