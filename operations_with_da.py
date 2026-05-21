@@ -2,6 +2,8 @@ import scipp as sc
 import magic_graphs
 import numpy
 
+from scipy.ndimage import label, center_of_mass, sum as ndi_sum
+
 def apply_detector_border(da, factor_border=0.07):
     if 'detector_border' in da.masks.keys():
         da.masks['detector_border'] |= da.coords["voxel_ID_VS_detector_a"] < 120*factor_border
@@ -59,4 +61,53 @@ def da_to_2d_hist(da, factor_border:float = 0.07):
     bin_toa = sc.linspace('toa', toa_min, toa_max, num=num_toa)
     data_hist = da.hist(toa=bin_toa, nu_event=bin_nu, gamma_event=bin_gamma)
     return data_hist
+
+def normalize_da_hist_by_vanadium(da_hist, da_hist_vanadium):
+    np_w = da_hist_vanadium.sum('toa').values
+    np_w/=np_w.max()
+    np_w_unique = numpy.unique(np_w)
+    np_w[np_w==0.] = np_w_unique[1]
+    da_hist_norm = da_hist.copy()
+    da_hist_norm.data.values /= np_w
+    da_hist_norm.data.variances /= np_w
+
+
+    np_w_time = da_hist_vanadium.sum(('nu_event','gamma_event')).values
+    np_w_time /= np_w_time.max()
+    factor = 0.03
+    flag_time = np_w_time > factor * np_w_time.max()
+    np_time = 0.5*(da_hist_vanadium.coords['toa'].values[:-1]+da_hist_vanadium.coords['toa'].values[1:])[flag_time]
+    np_time_min = np_time.min()
+    np_time_max = np_time.max()
+
+    da_hist_norm = da_hist_norm['toa', sc.scalar(np_time_min, unit='s'):sc.scalar(np_time_max, unit='s')].copy()
+    np_time_2 = 0.5*(da_hist_norm.coords['toa'].values[:-1]+da_hist_norm.coords['toa'].values[1:])
+    np_w_time_2 = numpy.interp(np_time_2, np_time, np_w_time[flag_time])
+    da_hist_norm.data.values /= numpy.expand_dims(np_w_time_2, axis=(1,2))
+    da_hist_norm.data.variances /= numpy.expand_dims(np_w_time_2, axis=(1,2))
+
+    return da_hist_norm
+
     
+
+def find_peaks_hist(data_event_hist):
+    """Find peaks by events"""
+    np_data = data_event_hist.values
+    np_flag_peaks = np_data > 0.1*(np_data.max()-np_data.min())+np_data.min()
+    peak_labels, peak_number = label(np_flag_peaks)
+    print(f"Number of peaks is {peak_number}")
+    peak_centers = center_of_mass(np_data, peak_labels, range(1, peak_number+1))
+
+    # bin_gamma = data_event_hist.coords['gamma_event']
+    # ind_gamma_centers = [hh[2] for hh in peak_centers]
+    # gamma_centers = numpy.interp(ind_gamma_centers, range(bin_gamma.size), bin_gamma.values)
+
+    # bin_nu = data_event_hist.coords['nu_event']
+    # ind_nu_centers = [hh[1] for hh in peak_centers]
+    # nu_centers = numpy.interp(ind_nu_centers, range(bin_nu.size), bin_nu.values)
+
+    # bin_toa = data_event_hist.coords['toa']
+    # ind_toa_centers = [hh[0] for hh in peak_centers]
+    # toa_centers = numpy.interp(ind_toa_centers, range(bin_toa.size), bin_toa.values)
+    
+    return peak_labels, peak_number

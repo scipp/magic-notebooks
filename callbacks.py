@@ -206,7 +206,7 @@ def run_peak_finder_hist(b):
             print("Something is wrong in run_peak_finder_hist")
             return
         
-        peak_labels, peak_number = find_peaks_hist(STATE.data_event_hist)
+        peak_labels, peak_number = operations_with_da.find_peaks_hist(STATE.data_event_hist)
     
         np_data = STATE.data_event_hist.values
         maskAll = numpy.ones(np_data.transpose().shape, dtype=bool)
@@ -223,7 +223,7 @@ def run_peak_finder_hist(b):
             layout=widgets.Layout(width="200px", height="200px")
         )
         clear_output()
-        
+
         fig, ax = plt.subplots(figsize=(12, 7))
         im = ax.imshow(base_img, cmap="Purples", aspect="auto")
         ax.set_title("Projection (sum over last axis)")
@@ -237,14 +237,12 @@ def run_peak_finder_hist(b):
             masked_img = (data3d * mask).sum(axis=-1)
             im.set_data(masked_img)
             im.set_clim(vmin=masked_img.min(), vmax=masked_img.max())
-
+    
             ax.set_title(f"Masked: {name} {x:.1f} {y:.1f} {z:.1f}")
 
             fig.canvas.draw_idle()
-
         mask_list.observe(update, names="value")
-
-        plt.show()
+        display(fig)
         display(mask_list)
 
 
@@ -388,28 +386,6 @@ def find_peaks(data_event):
 
     return da_peaks
 
-
-def find_peaks_hist(data_event_hist):
-    """Find peaks by events"""
-    np_data = data_event_hist.values
-    np_flag_peaks = np_data > 0.1*(np_data.max()-np_data.min())+np_data.min()
-    peak_labels, peak_number = label(np_flag_peaks)
-    print(f"Number of peaks is {peak_number}")
-    peak_centers = center_of_mass(np_data, peak_labels, range(1, peak_number+1))
-
-    # bin_gamma = data_event_hist.coords['gamma_event']
-    # ind_gamma_centers = [hh[2] for hh in peak_centers]
-    # gamma_centers = numpy.interp(ind_gamma_centers, range(bin_gamma.size), bin_gamma.values)
-
-    # bin_nu = data_event_hist.coords['nu_event']
-    # ind_nu_centers = [hh[1] for hh in peak_centers]
-    # nu_centers = numpy.interp(ind_nu_centers, range(bin_nu.size), bin_nu.values)
-
-    # bin_toa = data_event_hist.coords['toa']
-    # ind_toa_centers = [hh[0] for hh in peak_centers]
-    # toa_centers = numpy.interp(ind_toa_centers, range(bin_toa.size), bin_toa.values)
-    
-    return peak_labels, peak_number
     
     
 def display_center(*graphs):
