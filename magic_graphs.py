@@ -17,7 +17,7 @@ def calc_incident_beam_magic(source_position, tp_position, sample_position):
     incident_beam = v1 + e1 * sc.norm(v2)
     return incident_beam
 
-def calc_registered_position(position, event_position_local, gamma):
+def calc_event_position_global(position, event_position_local, gamma):
 
     zero_o = sc.sin(sc.zeros_like(gamma))
     one_o = sc.cos(sc.zeros_like(gamma))
@@ -28,8 +28,8 @@ def calc_registered_position(position, event_position_local, gamma):
     ]
     rotation_gamma = get_sc_rotation_matrix(m_gamma)
     position_rotated = rotation_gamma * event_position_local.to(unit='m', copy=False)
-    registered_position = position.to(unit='m', copy=False) + position_rotated
-    return registered_position
+    event_position_global = position.to(unit='m', copy=False) + position_rotated
+    return event_position_global
 
 def calc_detector_event_position_local(detector_pixel_gamma_local, detector_pixel_vertical_local, detector_radius):
     dr = detector_radius.to(unit='m', copy=False)
@@ -167,9 +167,24 @@ def calc_unit_cell_parameters_by_b_matrix(b_matrix):
 def calc_norm_q(Q_vec):
     return sc.norm(Q_vec)
 
-def calc_voxel_id_vsac(voxel_ID):
+def calc_voxel_id_vsac(voxel_ID, N_vs, N_a, N_c, ID_0):
     np_id = voxel_ID.values
-    det = DetectorA()
+    
+    det = DetectorA(
+        N_vs = N_vs.value,
+        N_a = N_a.value,
+        N_c = N_c.value,
+        r_d = 0,
+        r_vs = 0,
+        a_t = 0,
+        b_t = 0,
+        a_b = 0,
+        b_b = 0,
+        omega_vs = 0,
+        delta_gamma_vs = 0,
+        gamma_d = 0,
+        n_id_0 = ID_0.value,
+    )
     n_vs, n_a, n_c = det._calc_n_vsac_by_id(np_id)
     voxel_ID_VS = sc.array(
                         dims=voxel_ID.dims,
@@ -183,15 +198,28 @@ def calc_voxel_id_vsac(voxel_ID):
                         dims=voxel_ID.dims,
                         values=n_c,
                     )
-    return {'voxel_ID_VS':voxel_ID_VS, 'voxel_ID_a':voxel_ID_a, 'voxel_ID_c_detector_a':voxel_ID_c}
+    return {'voxel_ID_VS':voxel_ID_VS, 'voxel_ID_a':voxel_ID_a, 'voxel_ID_c':voxel_ID_c}
     
 
-def calc_event_position_local_by_pixel_id(voxel_ID_VS, voxel_ID_a, voxel_ID_c, casette_omega):
+def calc_event_position_local_by_pixel_id(voxel_ID_VS, voxel_ID_a, voxel_ID_c, N_vs, N_a, N_c, r_d, r_vs, a_t,b_t, a_b, b_b, casette_omega, casette_delta_gamma, gamma, ID_0):
     np_vs = voxel_ID_VS.values
     np_a = voxel_ID_a.values
     np_c = voxel_ID_c.values
-    casette_omega = casette_omega.to(unit="rad").value
-    det = DetectorA(casette_omega=casette_omega)
+    det = DetectorA(
+        N_vs = N_vs.value,
+        N_a = N_a.value,
+        N_c = N_c.value,
+        r_d = r_d.to(unit='m').value,
+        r_vs = r_vs.to(unit='m').value,
+        a_t = a_t.to(unit='m').value,
+        b_t = b_t.to(unit='m').value,
+        a_b = a_b.to(unit='m').value,
+        b_b = b_b.to(unit='m').value,
+        omega_vs = casette_omega.to(unit='rad', copy=False).value,
+        delta_gamma_vs = casette_delta_gamma.to(unit='rad', copy=False).value,
+        gamma_d = gamma.to(unit='rad', copy=False).value,
+        n_id_0 = ID_0.value,
+    )
     np_xyz = det._calc_xyz_by_n_vsac(np_vs, np_a, np_c)
     # np_xyz = det.calc_xyz_by_id(np_id)
     event_position_local = sc.vectors(
@@ -206,22 +234,22 @@ def calc_gamma_nu_event(event_position_local, gamma):
     np_norm = numpy.linalg.norm(np_xyz,axis=0)
     np_gamma = numpy.atan2(np_xyz[0], np_xyz[2]) + gamma.to(unit="rad").value
     np_nu = numpy.asin(np_xyz[1]/np_norm)
-    gamma_event = sc.array(
+    event_gamma = sc.array(
         dims=event_position_local.dims, 
         values=np_gamma, 
         unit='rad')
 
-    nu_event = sc.array(
+    event_nu = sc.array(
         dims=event_position_local.dims, 
         values=np_nu, 
         unit='rad')
-    return {"gamma_event":gamma_event, "nu_event":nu_event, }
+    return {"event_gamma":event_gamma, "event_nu":event_nu, }
     
 scipp_graph = {**graph.beamline.beamline(scatter=True), **graph.tof.elastic_hkl(start='tof')}
 
 
-graph_detector_a = {
-    "registered_position": calc_registered_position,
+graph_detector = {
+    "event_position_global": calc_event_position_global,
     ("voxel_ID_VS", "voxel_ID_a", "voxel_ID_c"):calc_voxel_id_vsac,
     ("event_gamma", "event_nu"): calc_gamma_nu_event,
     "event_position_local": calc_event_position_local_by_pixel_id,

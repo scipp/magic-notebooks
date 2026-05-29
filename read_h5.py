@@ -111,7 +111,7 @@ def read_detector_a_from_nexus(f_nexus: str):
                     "gamma": sc.scalar(gamma, unit="deg.").to(
                         unit="rad", copy=False
                     ),
-                    "id_0": sc.scalar(detector.n_id_0,dtype=int),
+                    "ID_0": sc.scalar(detector.n_id_0,dtype=int),
                     "N_vs": sc.scalar(detector.N_vs, dtype=int),
                     "N_a": sc.scalar(detector.N_a, dtype=int),
                     "N_c": sc.scalar(detector.N_c, dtype=int),
@@ -121,6 +121,7 @@ def read_detector_a_from_nexus(f_nexus: str):
                     "b_t": sc.scalar(detector.b_t, dtype=float, unit='m'),
                     "a_b": sc.scalar(detector.a_b, dtype=float, unit='m'),
                     "b_b": sc.scalar(detector.b_b, dtype=float, unit='m'),
+                    "casette_delta_gamma": sc.scalar(detector.delta_gamma_vs, dtype=float, unit='rad'),
                 },
             )
             dg_out["detector_a"] = da
@@ -199,7 +200,7 @@ def read_detector_b_from_nexus(f_nexus: str):
                     "gamma": sc.scalar(gamma, unit="deg.").to(
                         unit="rad", copy=False
                     ),
-                    "id_0": sc.scalar(detector.n_id_0,dtype=int),
+                    "ID_0": sc.scalar(detector.n_id_0,dtype=int),
                     "N_vs": sc.scalar(detector.N_vs, dtype=int),
                     "N_a": sc.scalar(detector.N_a, dtype=int),
                     "N_c": sc.scalar(detector.N_c, dtype=int),
@@ -209,6 +210,7 @@ def read_detector_b_from_nexus(f_nexus: str):
                     "b_t": sc.scalar(detector.b_t, dtype=float, unit='m'),
                     "a_b": sc.scalar(detector.a_b, dtype=float, unit='m'),
                     "b_b": sc.scalar(detector.b_b, dtype=float, unit='m'),
+                    "casette_delta_gamma": sc.scalar(detector.delta_gamma_vs, dtype=float, unit='rad'),
                 },
             )
             dg_out["detector_b"] = da
