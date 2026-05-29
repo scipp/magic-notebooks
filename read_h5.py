@@ -68,7 +68,7 @@ def read_detector_a_from_nexus(f_nexus: str):
             s_key = l_detector_a_key[0]
             data_events = data[s_key]["events"][()]
 
-            data_events, np_id, _, _, _, _ = (
+            data_events, np_id, _, _, _, _, detector = (
                 voxelization.voxelization_of_mcstas_events_for_detector_a(
                     data_events,
                     numpy.radians(casette_omega),
@@ -88,10 +88,10 @@ def read_detector_a_from_nexus(f_nexus: str):
                     variances=(data_events[:, ind_p] ** 2),
                 ),
                 coords={
-                    "detector_position": sc.vector(
+                    "position": sc.vector(
                         detector_position, unit="m"
                     ),
-                    "detector_event_position_local_mcstas": sc.vectors(
+                    "event_position_local_mcstas": sc.vectors(
                         dims=[
                             "event",
                         ],
@@ -111,6 +111,16 @@ def read_detector_a_from_nexus(f_nexus: str):
                     "gamma": sc.scalar(gamma, unit="deg.").to(
                         unit="rad", copy=False
                     ),
+                    "id_0": sc.scalar(detector.n_id_0,dtype=int),
+                    "N_vs": sc.scalar(detector.N_vs, dtype=int),
+                    "N_a": sc.scalar(detector.N_a, dtype=int),
+                    "N_c": sc.scalar(detector.N_c, dtype=int),
+                    "r_d": sc.scalar(detector.r_d, dtype=float, unit='m'),
+                    "r_vs": sc.scalar(detector.r_vs, dtype=float, unit='m'),
+                    "a_t": sc.scalar(detector.a_t, dtype=float, unit='m'),
+                    "b_t": sc.scalar(detector.b_t, dtype=float, unit='m'),
+                    "a_b": sc.scalar(detector.a_b, dtype=float, unit='m'),
+                    "b_b": sc.scalar(detector.b_b, dtype=float, unit='m'),
                 },
             )
             dg_out["detector_a"] = da
@@ -146,7 +156,7 @@ def read_detector_b_from_nexus(f_nexus: str):
             s_key = l_detector_b_key[0]
             data_events = data[s_key]["events"][()]
 
-            data_events, np_id, _, _, _, _ = (
+            data_events, np_id, _, _, _, _, detector = (
                 voxelization.voxelization_of_mcstas_events_for_detector_b(
                     data_events,
                     numpy.radians(casette_omega),
@@ -166,10 +176,10 @@ def read_detector_b_from_nexus(f_nexus: str):
                     variances=(data_events[:, ind_p] ** 2),
                 ),
                 coords={
-                    "detector_position": sc.vector(
+                    "position": sc.vector(
                         detector_position, unit="m"
                     ),
-                    "detector_event_position_local_mcstas": sc.vectors(
+                    "event_position_local_mcstas": sc.vectors(
                         dims=[
                             "event",
                         ],
@@ -189,6 +199,16 @@ def read_detector_b_from_nexus(f_nexus: str):
                     "gamma": sc.scalar(gamma, unit="deg.").to(
                         unit="rad", copy=False
                     ),
+                    "id_0": sc.scalar(detector.n_id_0,dtype=int),
+                    "N_vs": sc.scalar(detector.N_vs, dtype=int),
+                    "N_a": sc.scalar(detector.N_a, dtype=int),
+                    "N_c": sc.scalar(detector.N_c, dtype=int),
+                    "r_d": sc.scalar(detector.r_d, dtype=float, unit='m'),
+                    "r_vs": sc.scalar(detector.r_vs, dtype=float, unit='m'),
+                    "a_t": sc.scalar(detector.a_t, dtype=float, unit='m'),
+                    "b_t": sc.scalar(detector.b_t, dtype=float, unit='m'),
+                    "a_b": sc.scalar(detector.a_b, dtype=float, unit='m'),
+                    "b_b": sc.scalar(detector.b_b, dtype=float, unit='m'),
                 },
             )
             dg_out["detector_b"] = da
@@ -639,9 +659,3 @@ def get_type_position_rotation_of_component(component):
     }
     return d_out
 
-
-dg_magic = read_magic_from_nexus(
-    r"/Users/iuriikibalin/Repositories/magic/MAGiC_instr_20260529_115045/mccode.h5"
-)
-
-dg_magic
