@@ -40,7 +40,7 @@ class DetectorA:
     a_b: float = -0.722903
     b_b: float = -1.077999
 
-    omega_vs: float = numpy.radians(-6.065)
+    omega_vs: float = numpy.radians(-9.101)
     delta_gamma_vs: float = numpy.radians(1.05)
     gamma_d: float = numpy.radians(0.00)
     n_id_0: int = 1
@@ -238,6 +238,42 @@ def voxelization_of_mcstas_events_for_detector_a(
     """
     # Here Gamma_d is zero as xyz are defined in coordinate system of arm
     det = DetectorA(omega_vs=omega_vs, gamma_d=0)
+    np_xyz = np_event[:, 1:4]
+
+    n_vs, n_a, n_c = det._calc_n_vsac_by_xyz(np_xyz.transpose())
+    flag_1 = numpy.logical_and(n_vs >= 0, n_vs < 2*det.N_vs)
+    flag_2 = numpy.logical_and(n_a >= 0, n_a < det.N_a)
+    flag_3 = numpy.logical_and(n_c >= 0, n_c < det.N_c)
+    flag = numpy.logical_and(numpy.logical_and(flag_1, flag_2), flag_3)
+    np_events_reduced = np_event[flag, :]
+    np_id = det._calc_id_by_n_vsac(n_vs[flag], n_a[flag], n_c[flag])
+    np_xyz_voxels = det.calc_xyz_by_id(np_id).transpose()
+    return np_events_reduced, np_id, np_xyz_voxels, n_vs[flag], n_a[flag], n_c[flag]
+
+
+def voxelization_of_mcstas_events_for_detector_b(
+    np_event: numpy.ndarray, omega_vs
+):
+    """
+    abs_logger_layers_dat_list_p_x_y_z_vx_vy_vz_t_id
+    """
+    # Here Gamma_d is zero as xyz are defined in coordinate system of arm
+    det = DetectorA( 
+        N_vs = 16*8,
+        N_a = 16,
+        N_c = 32,
+        r_d = 1.000,
+        r_vs = 0.530,
+        delta_gamma_vs = numpy.radians(-0.94),
+                    
+        a_t = 0.051016,
+        b_t = 0.077887,
+        a_b = -0.051016,
+        b_b = -0.077887,
+        omega_vs=omega_vs, 
+        gamma_d = numpy.radians(0.00),
+        n_id_0 = 491521, 
+    )
     np_xyz = np_event[:, 1:4]
 
     n_vs, n_a, n_c = det._calc_n_vsac_by_xyz(np_xyz.transpose())

@@ -98,6 +98,10 @@ def read_detector_a_from_nexus(f_nexus: str):
                         values=data_events[:, ind_x : (ind_z + 1)],
                         unit="m",
                     ),
+                    "voxel_ID": sc.array(
+                        dims=["event"],
+                        values=np_id,
+                    ),
                     "toa": sc.array(
                         dims=["event"], values=data_events[:, ind_t], unit="s"
                     ),
@@ -142,6 +146,13 @@ def read_detector_b_from_nexus(f_nexus: str):
             s_key = l_detector_b_key[0]
             data_events = data[s_key]["events"][()]
 
+            data_events, np_id, _, _, _, _ = (
+                voxelization.voxelization_of_mcstas_events_for_detector_b(
+                    data_events,
+                    numpy.radians(casette_omega),
+                )
+            )
+
             l_param = s_key.split("_")[5:]
             ind_p = l_param.index("p")
             ind_x = l_param.index("x")
@@ -164,6 +175,10 @@ def read_detector_b_from_nexus(f_nexus: str):
                         ],
                         values=data_events[:, ind_x : (ind_z + 1)],
                         unit="m",
+                    ),
+                    "voxel_ID": sc.array(
+                        dims=["event"],
+                        values=np_id,
                     ),
                     "toa": sc.array(
                         dims=["event"], values=data_events[:, ind_t], unit="s"
