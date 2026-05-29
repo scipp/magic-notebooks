@@ -4,100 +4,77 @@ import h5py
 import voxelization
 
 
-def read_h5_to_dict(
-    f_nexus,
-    s_source: str = "_sourceMantid",
-    s_sample: str = "_sampleMantid",
-    s_detector_a: str = "_arm_detector_a",
-    flag_voxelization: bool = True,
-):
-    d_out = {}
-    delta_L_deafault = sc.scalar(0.0, unit="m")
-    delta_t_default = sc.scalar(3.0, unit="ms").to(unit="s", copy=False)
+def read_source_from_nexus(f_nexus: str):
+    dg_out = sc.DataGroup()
+    s_source = "_sourceMantid"
     with h5py.File(f_nexus) as fid:
         components = fid["entry1"]["instrument"]["components"]
         l_key_source = [hh for hh in components.keys() if s_source in hh]
+        if len(l_key_source) != 0:
+            source = components[l_key_source[0]]
 
-        l_key_sample = [hh for hh in components.keys() if s_sample in hh]
-
-        l_key_detector = [hh for hh in components.keys() if s_detector_a in hh]
-
-        l_components = components.keys()
-
-        flag_source = False
-        if len(l_key_sample) != 0:
-            source = components[l_key_sample[0]]
             source_position = source["Position"][()]
-            flag_source = True
+            dg_out["source_position"] = sc.vector(
+                value=source_position, unit="m"
+            )
 
-        flag_sample = False
+    return dg_out
+
+
+def read_sample_from_nexus(f_nexus: str):
+    dg_out = sc.DataGroup()
+
+    s_sample = "_sampleMantid"
+    with h5py.File(f_nexus) as fid:
+        components = fid["entry1"]["instrument"]["components"]
+        l_key_sample = [hh for hh in components.keys() if s_sample in hh]
         if len(l_key_sample) != 0:
             sample = components[l_key_sample[0]]
             sample_position = sample["Position"][()]
-            flag_sample = True
+            dg_out["sample_position"] = sc.vector(
+                value=sample_position, unit="m"
+            )
 
-        flag_detector = False
+    return dg_out
+
+
+def read_detector_a_from_nexus(f_nexus: str):
+    dg_out = sc.DataGroup()
+    s_detector_a = "_arm_da"
+
+    with h5py.File(f_nexus) as fid:
+        components = fid["entry1"]["instrument"]["components"]
+        simulation_param = fid["entry1"]["simulation"]["Param"]
+        data = fid["entry1"]["data"]  #
+
+        gamma = float(simulation_param["da_gamma"][()][0].decode("ascii"))
+        casette_omega = float(
+            simulation_param["A_casette_omega"][()][0].decode("ascii")
+        )
+
+        l_key_detector = [hh for hh in components.keys() if s_detector_a in hh]
+
         if len(l_key_detector) != 0:
             detector = components[l_key_detector[0]]
             detector_position = detector["Position"][()]
-            detector_rotation = detector["Rotation"][()]
-            flag_detector = True
 
-        data = fid["entry1"]["data"]  #
-        l_data = data.keys()
-        l_component_data_names = take_component_data_names(
-            l_components, l_data
-        )
-        for component_name, data_name in l_component_data_names:
-            component = components[component_name]
-            data_component = data[data_name]
-
-            d_out[data_name] = read_data_component_to_dict(
-                component, data_component
-            )
-            d_out[data_name]["component_name"] = component_name
-
-        d_components = {}
-        for component_name in l_components:
-            component = components[component_name]
-            d_component = get_type_position_rotation_of_component(component)
-            component_name_short = "_".join(component_name.split("_")[1:])
-            d_components[component_name_short] = d_component
-        d_out["components"] = d_components
-
-        simulation_param = fid["entry1"]["simulation"]["Param"]
-        d_simulation_param = {}
-        for s_key in simulation_param.keys():
-            try:
-                d_simulation_param[s_key] = float(
-                    simulation_param[s_key][()][0].decode("ascii")
-                )
-            except:
-                pass
-        d_out["simulation_parameters"] = d_simulation_param
-
-        sample_omega = d_simulation_param.get("sample_omega", 0.0)
-        sample_chi = d_simulation_param.get("sample_chi", 0.0)
-        sample_phi = d_simulation_param.get("sample_phi", 0.0)
-        gamma_detector_a = d_simulation_param.get("gamma_detector_a", 0.0)
-        omega_vs = d_simulation_param.get("omega_casette", 0.0)
-
-        # neutron_up = simulation_param["isFlip"][()]
         l_detector_a_key = [
             key
-            for i_key, key in enumerate(l_data)
-            if "abs_logger_layers_dat_list"
+            for i_key, key in enumerate(data.keys())
+            if "A_abs_logger_dat_list" in key
         ]
-        if len(l_detector_a_key) > 0:
+
+        if len(l_detector_a_key) != 0:
             s_key = l_detector_a_key[0]
             data_events = data[s_key]["events"][()]
-            if flag_voxelization:
-                data_events, np_id, _, _, _, _ = (
-                    voxelization.voxelization_of_mcstas_events_for_detector_a(
-                        data_events,
-                        numpy.radians(omega_vs),
-                    )
+
+            data_events, np_id, _, _, _, _ = (
+                voxelization.voxelization_of_mcstas_events_for_detector_a(
+                    data_events,
+                    numpy.radians(casette_omega),
                 )
+            )
+
             l_param = s_key.split("_")[5:]
             ind_p = l_param.index("p")
             ind_x = l_param.index("x")
@@ -111,10 +88,6 @@ def read_h5_to_dict(
                     variances=(data_events[:, ind_p] ** 2),
                 ),
                 coords={
-                    # "detector_radius": sc.scalar(detector_radius, unit="m"),
-                    "delta_L": delta_L_deafault,
-                    "delta_t": delta_t_default,
-                    "sample_offset": sc.vector([0.0, 0.0, 0.0], unit="m"),
                     "detector_position": sc.vector(
                         detector_position, unit="m"
                     ),
@@ -128,77 +101,439 @@ def read_h5_to_dict(
                     "toa": sc.array(
                         dims=["event"], values=data_events[:, ind_t], unit="s"
                     ),
-                    "omega_vs_detector_a": sc.scalar(omega_vs, unit="deg.").to(
+                    "casette_omega": sc.scalar(casette_omega, unit="deg.").to(
                         unit="rad", copy=False
                     ),
-                    "gamma_detector_a": sc.scalar(
-                        gamma_detector_a, unit="deg."
-                    ).to(unit="rad", copy=False),
-                    "sample_omega": sc.scalar(sample_omega, unit="deg.").to(
-                        unit="rad", copy=False
-                    ),
-                    "sample_chi": sc.scalar(sample_chi, unit="deg.").to(
-                        unit="rad", copy=False
-                    ),
-                    "sample_phi": sc.scalar(sample_phi, unit="deg.").to(
+                    "gamma": sc.scalar(gamma, unit="deg.").to(
                         unit="rad", copy=False
                     ),
                 },
             )
-            if flag_voxelization:
-                da.coords["voxel_ID_detector_a"] = sc.array(
-                    dims=["event"],
-                    values=np_id,
-                )
+            dg_out["detector_a"] = da
+    return dg_out
 
-            if "arm_w6" in d_components.keys():
-                da.coords["source_position"] = sc.vector(
-                    value=d_components["arm_w6"]["position"], unit="m"
-                )
-            elif flag_source:
-                da.coords["source_position"] = sc.vector(
-                    value=source_position, unit="m"
-                )
 
-            if "arm_egs2" in d_components.keys():
-                da.coords["tp_position"] = sc.vector(
-                    value=d_components["arm_egs2"]["position"], unit="m"
-                )
-            if flag_sample:
-                da.coords["ideal_sample_position"] = sc.vector(
-                    sample_position, unit="m"
-                )
+def read_detector_b_from_nexus(f_nexus: str):
+    dg_out = sc.DataGroup()
+    s_detector_b = "_arm_db"
+    with h5py.File(f_nexus) as fid:
+        components = fid["entry1"]["instrument"]["components"]
+        simulation_param = fid["entry1"]["simulation"]["Param"]
+        data = fid["entry1"]["data"]  #
 
-            d_out["data_event"] = da
-        if "tof_egs2_1_plot" in d_out.keys():  # cave monitor
-            data_monitor = d_out["tof_egs2_1_plot"]
+        gamma = float(simulation_param["db_gamma"][()][0].decode("ascii"))
+        casette_omega = float(
+            simulation_param["B_casette_omega"][()][0].decode("ascii")
+        )
+
+        l_key_detector = [hh for hh in components.keys() if s_detector_b in hh]
+
+        if len(l_key_detector) != 0:
+            detector = components[l_key_detector[0]]
+            detector_position = detector["Position"][()]
+
+        l_detector_b_key = [
+            key
+            for i_key, key in enumerate(data.keys())
+            if "B_abs_logger_dat_list" in key
+        ]
+
+        if len(l_detector_b_key) != 0:
+            s_key = l_detector_b_key[0]
+            data_events = data[s_key]["events"][()]
+
+            l_param = s_key.split("_")[5:]
+            ind_p = l_param.index("p")
+            ind_x = l_param.index("x")
+            ind_z = l_param.index("z")
+            ind_t = l_param.index("t")
+
             da = sc.DataArray(
                 data=sc.array(
-                    dims=["counts"],
-                    values=data_monitor["data"],
-                    variances=(data_monitor["errors"] ** 2),
+                    dims=["event"],
+                    values=data_events[:, ind_p],
+                    variances=(data_events[:, ind_p] ** 2),
                 ),
                 coords={
-                    "source_position": sc.vector(
-                        value=d_components["arm_w6"]["position"], unit="m"
+                    "detector_position": sc.vector(
+                        detector_position, unit="m"
                     ),
-                    "tp_position": sc.vector(
-                        value=d_components["arm_egs2"]["position"], unit="m"
+                    "detector_event_position_local_mcstas": sc.vectors(
+                        dims=[
+                            "event",
+                        ],
+                        values=data_events[:, ind_x : (ind_z + 1)],
+                        unit="m",
                     ),
-                    "cave_monitor_position": sc.vector(
-                        value=d_components["tof_egs2_1"]["position"], unit="m"
-                    ),
-                    "delta_L": delta_L_deafault,
-                    "delta_t": delta_t_default,
                     "toa": sc.array(
-                        dims=["counts"],
-                        values=data_monitor["time_of_flight"],
-                        unit="micros",
-                    ).to(unit="s", copy=False),
+                        dims=["event"], values=data_events[:, ind_t], unit="s"
+                    ),
+                    "casette_omega": sc.scalar(casette_omega, unit="deg.").to(
+                        unit="rad", copy=False
+                    ),
+                    "gamma": sc.scalar(gamma, unit="deg.").to(
+                        unit="rad", copy=False
+                    ),
                 },
             )
-            d_out["data_cave_monitor"] = da
-    return d_out
+            dg_out["detector_b"] = da
+
+    return dg_out
+
+
+def read_monitor_1_from_nexus(f_nexus: str):
+    dg_out = sc.DataGroup()
+    return dg_out
+
+
+def read_monitor_2_from_nexus(f_nexus: str):
+    dg_out = sc.DataGroup()
+
+    # with h5py.File(f_nexus) as fid:
+    #     if "tof_egs2_1_plot" in d_out.keys():  # cave monitor
+    #         data_monitor = d_out["tof_egs2_1_plot"]
+    #         da = sc.DataArray(
+    #             data=sc.array(
+    #                 dims=["counts"],
+    #                 values=data_monitor["data"],
+    #                 variances=(data_monitor["errors"] ** 2),
+    #             ),
+    #             coords={
+    #                 "source_position": sc.vector(
+    #                     value=d_components["arm_w6"]["position"], unit="m"
+    #                 ),
+    #                 "tp_position": sc.vector(
+    #                     value=d_components["arm_egs2"]["position"], unit="m"
+    #                 ),
+    #                 "cave_monitor_position": sc.vector(
+    #                     value=d_components["tof_egs2_1"]["position"], unit="m"
+    #                 ),
+    #                 "delta_L": delta_L_deafault,
+    #                 "delta_t": delta_t_default,
+    #                 "toa": sc.array(
+    #                     dims=["counts"],
+    #                     values=data_monitor["time_of_flight"],
+    #                     unit="micros",
+    #                 ).to(unit="s", copy=False),
+    #             },
+    #         )
+    #         d_out["data_cave_monitor"] = da
+
+    return dg_out
+
+
+def read_component_positions_from_nexus(f_nexus: str):
+    dg_out = sc.DataGroup()
+
+    with h5py.File(f_nexus) as fid:
+        components = fid["entry1"]["instrument"]["components"]
+        l_components = components.keys()
+
+        data = fid["entry1"]["data"]  #
+        l_data = data.keys()
+        l_component_data_names = take_component_data_names(
+            l_components, l_data
+        )
+        for component_name, data_name in l_component_data_names:
+            component = components[component_name]
+            data_component = data[data_name]
+
+            dg_out[data_name] = read_data_component_to_dict(
+                component, data_component
+            )
+            dg_out[data_name]["component_name"] = component_name
+
+        d_components = {}
+        for component_name in l_components:
+            component = components[component_name]
+            d_component = get_type_position_rotation_of_component(component)
+            component_name_short = "_".join(component_name.split("_")[1:])
+            d_components[component_name_short] = d_component
+        dg_out["components"] = d_components
+
+        if "arm_egs2" in d_components.keys():
+            dg_out["tp_position"] = sc.vector(
+                value=d_components["arm_egs2"]["position"], unit="m"
+            )
+
+    return dg_out
+
+
+def read_simulated_data_from_nexus(f_nexus: str):
+    dg_out = sc.DataGroup()
+
+    with h5py.File(f_nexus) as fid:
+        simulation_param = fid["entry1"]["simulation"]["Param"]
+        d_simulation_param = {}
+        for s_key in simulation_param.keys():
+            try:
+                d_simulation_param[s_key] = float(
+                    simulation_param[s_key][()][0].decode("ascii")
+                )
+            except:
+                pass
+        dg_out["simulation_parameters"] = d_simulation_param
+
+        dg_out["sample_omega"] = d_simulation_param.get("sample_omega", 0.0)
+        dg_out["sample_chi"] = d_simulation_param.get("sample_chi", 0.0)
+        dg_out["sample_phi"] = d_simulation_param.get("sample_phi", 0.0)
+        # dg_out["da_gamma"] = d_simulation_param.get("da_gamma", 0.0)
+        # dg_out["da_casette_omega"] = d_simulation_param.get(
+        #     "A_casette_omega", 0.0
+        # )
+
+        # dg_out["db_gamma"] = d_simulation_param.get("db_gamma", 0.0)
+        # dg_out["db_casette_omega"] = d_simulation_param.get(
+        #     "B_casette_omega", 0.0
+        # )
+
+    return dg_out
+
+
+def read_magic_from_nexus(f_nexus):
+
+    dg_magic = sc.DataGroup()
+    dg_magic["delta_L"] = sc.scalar(0.0, unit="m")
+    dg_magic["delta_t"] = sc.scalar(3.0, unit="ms").to(unit="s", copy=False)
+
+    dg_magic.update(read_simulated_data_from_nexus(f_nexus))
+    dg_magic.update(read_component_positions_from_nexus(f_nexus))
+
+    dg_magic.update(read_source_from_nexus(f_nexus))
+    dg_magic.update(read_sample_from_nexus(f_nexus))
+    dg_magic.update(read_detector_a_from_nexus(f_nexus))
+    dg_magic.update(read_detector_b_from_nexus(f_nexus))
+    dg_magic.update(read_monitor_1_from_nexus(f_nexus))
+    dg_magic.update(read_monitor_2_from_nexus(f_nexus))
+
+    d_components = dg_magic["components"]
+    if "arm_w6" in d_components.keys():
+        dg_magic["source_position"] = sc.vector(
+            value=d_components["arm_w6"]["position"], unit="m"
+        )
+
+    return dg_magic
+
+
+# def read_h5_to_dict(
+#     f_nexus,
+#     s_source: str = "_sourceMantid",
+#     s_sample: str = "_sampleMantid",
+#     s_detector_a: str = "_arm_da",
+#     s_detector_b: str = "_arm_db",
+#     flag_voxelization: bool = True,
+# ):
+#     d_out = {}
+#     delta_L_deafault = sc.scalar(0.0, unit="m")
+#     delta_t_default = sc.scalar(3.0, unit="ms").to(unit="s", copy=False)
+#     with h5py.File(f_nexus) as fid:
+#         components = fid["entry1"]["instrument"]["components"]
+#         l_key_source = [hh for hh in components.keys() if s_source in hh]
+
+#         l_key_sample = [hh for hh in components.keys() if s_sample in hh]
+
+#         l_key_detector = [hh for hh in components.keys() if s_detector_a in hh]
+#         l_key_detector_b = [
+#             hh for hh in components.keys() if s_detector_b in hh
+#         ]
+
+#         l_components = components.keys()
+
+#         flag_source = False
+#         if len(l_key_sample) != 0:
+#             source = components[l_key_sample[0]]
+#             source_position = source["Position"][()]
+#             flag_source = True
+
+#         flag_sample = False
+#         if len(l_key_sample) != 0:
+#             sample = components[l_key_sample[0]]
+#             sample_position = sample["Position"][()]
+#             flag_sample = True
+
+#         flag_detector = False
+#         if len(l_key_detector) != 0:
+#             detector = components[l_key_detector[0]]
+#             detector_position = detector["Position"][()]
+#             detector_rotation = detector["Rotation"][()]
+#             flag_detector = True
+
+#         flag_detector_b = False
+#         if len(l_key_detector_b) != 0:
+#             detector_b = components[l_key_detector_b[0]]
+#             flag_detector_b = True
+
+#         data = fid["entry1"]["data"]  #
+#         l_data = data.keys()
+#         l_component_data_names = take_component_data_names(
+#             l_components, l_data
+#         )
+#         for component_name, data_name in l_component_data_names:
+#             component = components[component_name]
+#             data_component = data[data_name]
+
+#             d_out[data_name] = read_data_component_to_dict(
+#                 component, data_component
+#             )
+#             d_out[data_name]["component_name"] = component_name
+
+#         d_components = {}
+#         for component_name in l_components:
+#             component = components[component_name]
+#             d_component = get_type_position_rotation_of_component(component)
+#             component_name_short = "_".join(component_name.split("_")[1:])
+#             d_components[component_name_short] = d_component
+#         d_out["components"] = d_components
+
+#         simulation_param = fid["entry1"]["simulation"]["Param"]
+#         d_simulation_param = {}
+#         for s_key in simulation_param.keys():
+#             try:
+#                 d_simulation_param[s_key] = float(
+#                     simulation_param[s_key][()][0].decode("ascii")
+#                 )
+#             except:
+#                 pass
+#         d_out["simulation_parameters"] = d_simulation_param
+
+#         sample_omega = d_simulation_param.get("sample_omega", 0.0)
+#         sample_chi = d_simulation_param.get("sample_chi", 0.0)
+#         sample_phi = d_simulation_param.get("sample_phi", 0.0)
+#         da_gamma = d_simulation_param.get("da_gamma", 0.0)
+#         da_casette_omega = d_simulation_param.get("A_casette_omega", 0.0)
+
+#         db_gamma = d_simulation_param.get("db_gamma", 0.0)
+#         db_casette_omega = d_simulation_param.get("B_casette_omega", 0.0)
+
+#         # neutron_up = simulation_param["isFlip"][()]
+#         l_detector_a_key = [
+#             key
+#             for i_key, key in enumerate(l_data)
+#             if "A_abs_logger_dat_list" in key
+#         ]
+#         l_detector_b_key = [
+#             key
+#             for i_key, key in enumerate(l_data)
+#             if "B_abs_logger_dat_list" in key
+#         ]
+
+#         if len(l_detector_a_key) > 0:
+#             s_key = l_detector_a_key[0]
+#             data_events = data[s_key]["events"][()]
+#             if flag_voxelization:
+#                 data_events, np_id, _, _, _, _ = (
+#                     voxelization.voxelization_of_mcstas_events_for_detector_a(
+#                         data_events,
+#                         numpy.radians(da_casette_omega),
+#                     )
+#                 )
+
+#             l_param = s_key.split("_")[5:]
+#             ind_p = l_param.index("p")
+#             ind_x = l_param.index("x")
+#             ind_z = l_param.index("z")
+#             ind_t = l_param.index("t")
+
+#             da = sc.DataArray(
+#                 data=sc.array(
+#                     dims=["event"],
+#                     values=data_events[:, ind_p],
+#                     variances=(data_events[:, ind_p] ** 2),
+#                 ),
+#                 coords={
+#                     # "detector_radius": sc.scalar(detector_radius, unit="m"),
+#                     "delta_L": delta_L_deafault,
+#                     "delta_t": delta_t_default,
+#                     "sample_offset": sc.vector([0.0, 0.0, 0.0], unit="m"),
+#                     "voxel_ID": sc.array(
+#                         dims=["event"],
+#                         values=np_id,
+#                     ),
+#                     "detector_position": sc.vector(
+#                         detector_position, unit="m"
+#                     ),
+#                     "detector_event_position_local_mcstas": sc.vectors(
+#                         dims=[
+#                             "event",
+#                         ],
+#                         values=data_events[:, ind_x : (ind_z + 1)],
+#                         unit="m",
+#                     ),
+#                     "toa": sc.array(
+#                         dims=["event"], values=data_events[:, ind_t], unit="s"
+#                     ),
+#                     "da_casette_omega": sc.scalar(
+#                         da_casette_omega, unit="deg."
+#                     ).to(unit="rad", copy=False),
+#                     "da_gamma": sc.scalar(da_gamma, unit="deg.").to(
+#                         unit="rad", copy=False
+#                     ),
+#                     "sample_omega": sc.scalar(sample_omega, unit="deg.").to(
+#                         unit="rad", copy=False
+#                     ),
+#                     "sample_chi": sc.scalar(sample_chi, unit="deg.").to(
+#                         unit="rad", copy=False
+#                     ),
+#                     "sample_phi": sc.scalar(sample_phi, unit="deg.").to(
+#                         unit="rad", copy=False
+#                     ),
+#                 },
+#             )
+
+#             if flag_voxelization:
+#                 da.coords["voxel_ID_detector_a"] = sc.array(
+#                     dims=["event"],
+#                     values=np_id,
+#                 )
+
+#             if "arm_w6" in d_components.keys():
+#                 da.coords["source_position"] = sc.vector(
+#                     value=d_components["arm_w6"]["position"], unit="m"
+#                 )
+#             elif flag_source:
+#                 da.coords["source_position"] = sc.vector(
+#                     value=source_position, unit="m"
+#                 )
+
+#             if "arm_egs2" in d_components.keys():
+#                 da.coords["tp_position"] = sc.vector(
+#                     value=d_components["arm_egs2"]["position"], unit="m"
+#                 )
+#             if flag_sample:
+#                 da.coords["ideal_sample_position"] = sc.vector(
+#                     sample_position, unit="m"
+#                 )
+
+#             d_out["data_event"] = da
+#         if "tof_egs2_1_plot" in d_out.keys():  # cave monitor
+#             data_monitor = d_out["tof_egs2_1_plot"]
+#             da = sc.DataArray(
+#                 data=sc.array(
+#                     dims=["counts"],
+#                     values=data_monitor["data"],
+#                     variances=(data_monitor["errors"] ** 2),
+#                 ),
+#                 coords={
+#                     "source_position": sc.vector(
+#                         value=d_components["arm_w6"]["position"], unit="m"
+#                     ),
+#                     "tp_position": sc.vector(
+#                         value=d_components["arm_egs2"]["position"], unit="m"
+#                     ),
+#                     "cave_monitor_position": sc.vector(
+#                         value=d_components["tof_egs2_1"]["position"], unit="m"
+#                     ),
+#                     "delta_L": delta_L_deafault,
+#                     "delta_t": delta_t_default,
+#                     "toa": sc.array(
+#                         dims=["counts"],
+#                         values=data_monitor["time_of_flight"],
+#                         unit="micros",
+#                     ).to(unit="s", copy=False),
+#                 },
+#             )
+#             d_out["data_cave_monitor"] = da
+#     return d_out
 
 
 def take_component_data_names(l_component, l_data):
@@ -288,3 +623,10 @@ def get_type_position_rotation_of_component(component):
         "rotation": rotation,
     }
     return d_out
+
+
+dg_magic = read_magic_from_nexus(
+    r"/Users/iuriikibalin/Repositories/magic/MAGiC_instr_20260529_115045/mccode.h5"
+)
+
+dg_magic
