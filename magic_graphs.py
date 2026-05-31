@@ -240,6 +240,8 @@ def calc_gamma_nu_event(event_position_local, gamma):
     
 scipp_graph = {**graph.beamline.beamline(scatter=True), **graph.tof.elastic_hkl(start='tof')}
 
+def calc_scattered_beam(sample_position, event_position_global):
+    return scipp_graph["scattered_beam"](position=event_position_global, sample_position=sample_position)
 
 graph_detector = {
     "event_position_global": calc_event_position_global,
@@ -257,7 +259,7 @@ graph_qvec = {
     "Q_vec_rot": Q_vec_rot_from_elastic_Q_vec,
     "L1": scipp_graph["L1"],
     "L2": scipp_graph["L2"],
-    "scattered_beam": scipp_graph["scattered_beam"],
+    "scattered_beam": calc_scattered_beam,
     "Q_vec": scipp_graph["Q_vec"],
     "two_theta": scipp_graph["two_theta"],
     "norm_Q": calc_norm_q,
