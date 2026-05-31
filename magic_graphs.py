@@ -31,13 +31,6 @@ def calc_event_position_global(position, event_position_local, gamma):
     event_position_global = position.to(unit='m', copy=False) + position_rotated
     return event_position_global
 
-def calc_detector_event_position_local(detector_pixel_gamma_local, detector_pixel_vertical_local, detector_radius):
-    dr = detector_radius.to(unit='m', copy=False)
-    dy = detector_pixel_vertical_local.to(unit='m', copy=False)
-    dx = dr * sc.sin(detector_pixel_gamma_local.to(unit="deg", copy=False))
-    dz = dr * sc.cos(detector_pixel_gamma_local.to(unit="deg", copy=False))
-    detector_event_position_local = sc.spatial.as_vectors(dx, dy, dz)
-    return detector_event_position_local
 
 def calc_tof(toa, delta_t=sc.scalar(value=3, unit="ms")):
     tof = toa.to(unit='s', copy=False) - delta_t.to(unit='s', copy=False)
@@ -201,7 +194,7 @@ def calc_voxel_id_vsac(voxel_ID, N_vs, N_a, N_c, ID_0):
     return {'voxel_ID_VS':voxel_ID_VS, 'voxel_ID_a':voxel_ID_a, 'voxel_ID_c':voxel_ID_c}
     
 
-def calc_event_position_local_by_pixel_id(voxel_ID_VS, voxel_ID_a, voxel_ID_c, N_vs, N_a, N_c, r_d, r_vs, a_t,b_t, a_b, b_b, casette_omega, casette_delta_gamma, gamma, ID_0):
+def calc_event_position_local_by_pixel_id(voxel_ID_VS, voxel_ID_a, voxel_ID_c, N_vs, N_a, N_c, r_d, r_vs, a_t,b_t, a_b, b_b, casette_omega, casette_delta_gamma, ID_0):
     np_vs = voxel_ID_VS.values
     np_a = voxel_ID_a.values
     np_c = voxel_ID_c.values
@@ -217,7 +210,7 @@ def calc_event_position_local_by_pixel_id(voxel_ID_VS, voxel_ID_a, voxel_ID_c, N
         b_b = b_b.to(unit='m').value,
         omega_vs = casette_omega.to(unit='rad', copy=False).value,
         delta_gamma_vs = casette_delta_gamma.to(unit='rad', copy=False).value,
-        gamma_d = gamma.to(unit='rad', copy=False).value,
+        gamma_d = numpy.radians(0.),
         n_id_0 = ID_0.value,
     )
     np_xyz = det._calc_xyz_by_n_vsac(np_vs, np_a, np_c)

@@ -94,28 +94,28 @@ def normalize_per_cave_monitor(da_q_event, da_cm, factor=0.1):
 
 def da_to_2d_hist(da, factor_border: float = 0.07):
     da = da.transform_coords(
-        ("gamma_event", "nu_event", "voxel_ID_a_detector_a"),
-        graph=magic_graphs.graph_qvec,
+        ("event_gamma", "event_nu", "voxel_ID_a"),
+        graph=magic_graphs.graph_detector,
         rename_dims=False,
     )
     delta_gamma_event = sc.scalar(0.15, unit="deg").to(unit="rad")
-    gamma_min = da.coords["gamma_event"].min()
-    gamma_max = da.coords["gamma_event"].max()
+    gamma_min = da.coords["event_gamma"].min()
+    gamma_max = da.coords["event_gamma"].max()
     num_gamma = int(((gamma_max - gamma_min) / delta_gamma_event).value)
-    bin_gamma = sc.linspace("gamma_event", gamma_min, gamma_max, num=num_gamma)
+    bin_gamma = sc.linspace("event_gamma", gamma_min, gamma_max, num=num_gamma)
 
     delta_nu_event = sc.scalar(0.333, unit="deg").to(unit="rad")
-    nu_min = da.coords["nu_event"].min()
-    nu_max = da.coords["nu_event"].max()
+    nu_min = da.coords["event_nu"].min()
+    nu_max = da.coords["event_nu"].max()
     num_nu = int(((nu_max - nu_min) / delta_nu_event).value)
-    bin_nu = sc.linspace("nu_event", nu_min, nu_max, num=num_nu)
+    bin_nu = sc.linspace("event_nu", nu_min, nu_max, num=num_nu)
 
     delta_toa = sc.scalar(0.1e-3, unit="s")
     toa_min = da.coords["toa"].min()
     toa_max = da.coords["toa"].max()
     num_toa = int(((toa_max - toa_min) / delta_toa).value)
     bin_toa = sc.linspace("toa", toa_min, toa_max, num=num_toa)
-    data_hist = da.hist(toa=bin_toa, nu_event=bin_nu, gamma_event=bin_gamma)
+    data_hist = da.hist(toa=bin_toa, event_nu=bin_nu, event_gamma=bin_gamma)
     return data_hist
 
 
@@ -158,11 +158,12 @@ def normalize_da_hist_by_vanadium(da_hist, da_hist_vanadium):
     return da_hist_norm
 
 
-def find_peaks_hist(data_event_hist):
+def find_peaks_hist(data_event_hist, threshold: float=0.1):
+    # Threshold from 0. to 1.
     """Find peaks by events"""
     np_data = data_event_hist.values
     np_flag_peaks = (
-        np_data > 0.1 * (np_data.max() - np_data.min()) + np_data.min()
+        np_data > threshold * (np_data.max() - np_data.min()) + np_data.min()
     )
     np_flag_peaks = binary_dilation(np_flag_peaks, iterations=2).astype(
         np_flag_peaks.dtype
