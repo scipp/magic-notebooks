@@ -23,6 +23,7 @@ def read_source_from_nexus(f_nexus: str):
 
 def read_sample_from_nexus(f_nexus: str):
     dg_out = sc.DataGroup()
+    dg_out["sample_offset"] = sc.vector(value=[0.0, 0.0, 0.0], unit="m")
 
     s_sample = "_sampleMantid"
     with h5py.File(f_nexus) as fid:
@@ -88,9 +89,7 @@ def read_detector_a_from_nexus(f_nexus: str):
                     variances=(data_events[:, ind_p] ** 2),
                 ),
                 coords={
-                    "position": sc.vector(
-                        detector_position, unit="m"
-                    ),
+                    "position": sc.vector(detector_position, unit="m"),
                     "event_position_local_mcstas": sc.vectors(
                         dims=[
                             "event",
@@ -111,17 +110,19 @@ def read_detector_a_from_nexus(f_nexus: str):
                     "gamma": sc.scalar(gamma, unit="deg.").to(
                         unit="rad", copy=False
                     ),
-                    "ID_0": sc.scalar(detector.n_id_0,dtype=int),
+                    "ID_0": sc.scalar(detector.n_id_0, dtype=int),
                     "N_vs": sc.scalar(detector.N_vs, dtype=int),
                     "N_a": sc.scalar(detector.N_a, dtype=int),
                     "N_c": sc.scalar(detector.N_c, dtype=int),
-                    "r_d": sc.scalar(detector.r_d, dtype=float, unit='m'),
-                    "r_vs": sc.scalar(detector.r_vs, dtype=float, unit='m'),
-                    "a_t": sc.scalar(detector.a_t, dtype=float, unit='m'),
-                    "b_t": sc.scalar(detector.b_t, dtype=float, unit='m'),
-                    "a_b": sc.scalar(detector.a_b, dtype=float, unit='m'),
-                    "b_b": sc.scalar(detector.b_b, dtype=float, unit='m'),
-                    "casette_delta_gamma": sc.scalar(detector.delta_gamma_vs, dtype=float, unit='rad'),
+                    "r_d": sc.scalar(detector.r_d, dtype=float, unit="m"),
+                    "r_vs": sc.scalar(detector.r_vs, dtype=float, unit="m"),
+                    "a_t": sc.scalar(detector.a_t, dtype=float, unit="m"),
+                    "b_t": sc.scalar(detector.b_t, dtype=float, unit="m"),
+                    "a_b": sc.scalar(detector.a_b, dtype=float, unit="m"),
+                    "b_b": sc.scalar(detector.b_b, dtype=float, unit="m"),
+                    "casette_delta_gamma": sc.scalar(
+                        detector.delta_gamma_vs, dtype=float, unit="rad"
+                    ),
                 },
             )
             dg_out["detector_a"] = da
@@ -177,9 +178,7 @@ def read_detector_b_from_nexus(f_nexus: str):
                     variances=(data_events[:, ind_p] ** 2),
                 ),
                 coords={
-                    "position": sc.vector(
-                        detector_position, unit="m"
-                    ),
+                    "position": sc.vector(detector_position, unit="m"),
                     "event_position_local_mcstas": sc.vectors(
                         dims=[
                             "event",
@@ -200,17 +199,19 @@ def read_detector_b_from_nexus(f_nexus: str):
                     "gamma": sc.scalar(gamma, unit="deg.").to(
                         unit="rad", copy=False
                     ),
-                    "ID_0": sc.scalar(detector.n_id_0,dtype=int),
+                    "ID_0": sc.scalar(detector.n_id_0, dtype=int),
                     "N_vs": sc.scalar(detector.N_vs, dtype=int),
                     "N_a": sc.scalar(detector.N_a, dtype=int),
                     "N_c": sc.scalar(detector.N_c, dtype=int),
-                    "r_d": sc.scalar(detector.r_d, dtype=float, unit='m'),
-                    "r_vs": sc.scalar(detector.r_vs, dtype=float, unit='m'),
-                    "a_t": sc.scalar(detector.a_t, dtype=float, unit='m'),
-                    "b_t": sc.scalar(detector.b_t, dtype=float, unit='m'),
-                    "a_b": sc.scalar(detector.a_b, dtype=float, unit='m'),
-                    "b_b": sc.scalar(detector.b_b, dtype=float, unit='m'),
-                    "casette_delta_gamma": sc.scalar(detector.delta_gamma_vs, dtype=float, unit='rad'),
+                    "r_d": sc.scalar(detector.r_d, dtype=float, unit="m"),
+                    "r_vs": sc.scalar(detector.r_vs, dtype=float, unit="m"),
+                    "a_t": sc.scalar(detector.a_t, dtype=float, unit="m"),
+                    "b_t": sc.scalar(detector.b_t, dtype=float, unit="m"),
+                    "a_b": sc.scalar(detector.a_b, dtype=float, unit="m"),
+                    "b_b": sc.scalar(detector.b_b, dtype=float, unit="m"),
+                    "casette_delta_gamma": sc.scalar(
+                        detector.delta_gamma_vs, dtype=float, unit="rad"
+                    ),
                 },
             )
             dg_out["detector_b"] = da
@@ -223,40 +224,30 @@ def read_monitor_1_from_nexus(f_nexus: str):
     return dg_out
 
 
-def read_monitor_2_from_nexus(f_nexus: str):
-    dg_out = sc.DataGroup()
+def update_monitor_2_from_nexus(dg_out: sc.DataGroup):
+    if "tof_egs2_1_plot" in dg_out.keys():  # cave monitor
+        data_monitor = dg_out["tof_egs2_1_plot"]
+        d_components = dg_out["components"]
+        da = sc.DataArray(
+            data=sc.array(
+                dims=["counts"],
+                values=data_monitor["data"],
+                variances=(data_monitor["errors"] ** 2),
+            ),
+            coords={
+                "position": sc.vector(
+                    value=d_components["tof_egs2_1"]["position"], unit="m"
+                ),
+                "toa": sc.array(
+                    dims=["counts"],
+                    values=data_monitor["time_of_flight"],
+                    unit="micros",
+                ).to(unit="s", copy=False),
+            },
+        )
+        dg_out["cave_monitor"] = da
 
-    # with h5py.File(f_nexus) as fid:
-    #     if "tof_egs2_1_plot" in d_out.keys():  # cave monitor
-    #         data_monitor = d_out["tof_egs2_1_plot"]
-    #         da = sc.DataArray(
-    #             data=sc.array(
-    #                 dims=["counts"],
-    #                 values=data_monitor["data"],
-    #                 variances=(data_monitor["errors"] ** 2),
-    #             ),
-    #             coords={
-    #                 "source_position": sc.vector(
-    #                     value=d_components["arm_w6"]["position"], unit="m"
-    #                 ),
-    #                 "tp_position": sc.vector(
-    #                     value=d_components["arm_egs2"]["position"], unit="m"
-    #                 ),
-    #                 "cave_monitor_position": sc.vector(
-    #                     value=d_components["tof_egs2_1"]["position"], unit="m"
-    #                 ),
-    #                 "delta_L": delta_L_deafault,
-    #                 "delta_t": delta_t_default,
-    #                 "toa": sc.array(
-    #                     dims=["counts"],
-    #                     values=data_monitor["time_of_flight"],
-    #                     unit="micros",
-    #                 ).to(unit="s", copy=False),
-    #             },
-    #         )
-    #         d_out["data_cave_monitor"] = da
-
-    return dg_out
+    return
 
 
 def read_component_positions_from_nexus(f_nexus: str):
@@ -311,9 +302,16 @@ def read_simulated_data_from_nexus(f_nexus: str):
                 pass
         dg_out["simulation_parameters"] = d_simulation_param
 
-        dg_out["sample_omega"] = d_simulation_param.get("sample_omega", 0.0)
-        dg_out["sample_chi"] = d_simulation_param.get("sample_chi", 0.0)
-        dg_out["sample_phi"] = d_simulation_param.get("sample_phi", 0.0)
+        dg_out["sample_omega"] = sc.scalar(
+            d_simulation_param.get("sample_omega", 0.0), unit="deg."
+        ).to(unit="rad", copy=False)
+        dg_out["sample_chi"] = sc.scalar(
+            d_simulation_param.get("sample_chi", 0.0), unit="deg."
+        ).to(unit="rad", copy=False)
+        dg_out["sample_phi"] = sc.scalar(
+            d_simulation_param.get("sample_phi", 0.0), unit="deg."
+        ).to(unit="rad", copy=False)
+
         # dg_out["da_gamma"] = d_simulation_param.get("da_gamma", 0.0)
         # dg_out["da_casette_omega"] = d_simulation_param.get(
         #     "A_casette_omega", 0.0
@@ -341,12 +339,16 @@ def read_magic_from_nexus(f_nexus):
     dg_magic.update(read_detector_a_from_nexus(f_nexus))
     dg_magic.update(read_detector_b_from_nexus(f_nexus))
     dg_magic.update(read_monitor_1_from_nexus(f_nexus))
-    dg_magic.update(read_monitor_2_from_nexus(f_nexus))
+    update_monitor_2_from_nexus(dg_magic)
 
     d_components = dg_magic["components"]
     if "arm_w6" in d_components.keys():
         dg_magic["source_position"] = sc.vector(
             value=d_components["arm_w6"]["position"], unit="m"
+        )
+    if "arm_egs2" in d_components.keys():
+        dg_magic["tp_position"] = sc.vector(
+            value=d_components["arm_egs2"]["position"], unit="m"
         )
 
     return dg_magic
@@ -660,4 +662,3 @@ def get_type_position_rotation_of_component(component):
         "rotation": rotation,
     }
     return d_out
-

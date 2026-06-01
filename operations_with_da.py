@@ -14,32 +14,32 @@ from scipy.ndimage import (
 def apply_detector_border(da, factor_border=0.07):
     if "detector_border" in da.masks.keys():
         da.masks["detector_border"] |= (
-            da.coords["voxel_ID_VS_detector_a"] < 120 * factor_border
+            da.coords["voxel_ID_VS"] < 120 * factor_border
         )
     else:
         da.masks["detector_border"] = (
-            da.coords["voxel_ID_VS_detector_a"] < 120 * factor_border
+            da.coords["voxel_ID_VS"] < 120 * factor_border
         )
-    da.masks["detector_border"] |= da.coords[
-        "voxel_ID_VS_detector_a"
-    ] > 120 * (1 - factor_border)
-    da.masks["detector_border"] |= (
-        da.coords["voxel_ID_a_detector_a"] < 128 * factor_border
+    da.masks["detector_border"] |= da.coords["voxel_ID_VS"] > 120 * (
+        1 - factor_border
     )
-    da.masks["detector_border"] |= da.coords["voxel_ID_a_detector_a"] > 128 * (
+    da.masks["detector_border"] |= (
+        da.coords["voxel_ID_a"] < 128 * factor_border
+    )
+    da.masks["detector_border"] |= da.coords["voxel_ID_a"] > 128 * (
         1 - factor_border
     )
 
 
 def da_to_laue_hist(da, factor_border: float = 0.07):
-    data_laue = sc.groupby(da, "voxel_ID_detector_a").sum("event")
+    data_laue = sc.groupby(da, "voxel_ID").sum("event")
     data_laue = data_laue.transform_coords(
         (
-            "detector_event_position_local",
-            "position",
-            "voxel_ID_VS_detector_a",
-            "voxel_ID_a_detector_a",
-            "voxel_ID_c_detector_a",
+            "event_position_local",
+            "event_position_global",
+            "voxel_ID_VS",
+            "voxel_ID_a",
+            "voxel_ID_c",
         ),
         graph=magic_graphs.graph_qvec,
         rename_dims=False,
@@ -128,7 +128,7 @@ def normalize_da_hist_by_vanadium(da_hist, da_hist_vanadium):
     da_hist_norm.data.values /= np_w
     da_hist_norm.data.variances /= np_w
 
-    np_w_time = da_hist_vanadium.sum(("nu_event", "gamma_event")).values
+    np_w_time = da_hist_vanadium.sum(("event_nu", "event_gamma")).values
     np_w_time /= np_w_time.max()
     factor = 0.03
     flag_time = np_w_time > factor * np_w_time.max()
@@ -158,7 +158,7 @@ def normalize_da_hist_by_vanadium(da_hist, da_hist_vanadium):
     return da_hist_norm
 
 
-def find_peaks_hist(data_event_hist, threshold: float=0.1):
+def find_peaks_hist(data_event_hist, threshold: float = 0.1):
     # Threshold from 0. to 1.
     """Find peaks by events"""
     np_data = data_event_hist.values
