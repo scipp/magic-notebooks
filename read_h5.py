@@ -7,6 +7,7 @@ import voxelization
 def read_source_from_nexus(f_nexus: str):
     dg_out = sc.DataGroup()
     s_source = "_sourceMantid"
+    d_components = read_component_positions_from_nexus(f_nexus)
     with h5py.File(f_nexus) as fid:
         components = fid["entry1"]["instrument"]["components"]
         l_key_source = [hh for hh in components.keys() if s_source in hh]
@@ -17,14 +18,31 @@ def read_source_from_nexus(f_nexus: str):
             dg_out["source_position"] = sc.vector(
                 value=source_position, unit="m"
             )
-
+    
+    if "arm_w6" in d_components.keys():
+        dg_out["source_position"] = sc.vector(
+            value=d_components["arm_w6"]["position"], unit="m"
+        )
     return dg_out
 
+def simulation_params_to_dict(f_nexus:str):
+    d_simulation_param = {}
+    
+    with h5py.File(f_nexus) as fid:
+        simulation_param = fid["entry1"]["simulation"]["Param"]
+        
+        for s_key in simulation_param.keys():
+            try:
+                d_simulation_param[s_key] = float(
+                    simulation_param[s_key][()][0].decode("ascii")
+                )
+            except:
+                pass
+    return d_simulation_param
 
 def read_sample_from_nexus(f_nexus: str):
     dg_out = sc.DataGroup()
-    dg_out["sample_offset"] = sc.vector(value=[0.0, 0.0, 0.0], unit="m")
-
+    d_simulation_param = simulation_params_to_dict(f_nexus)
     s_sample = "_sampleMantid"
     with h5py.File(f_nexus) as fid:
         components = fid["entry1"]["instrument"]["components"]
@@ -32,26 +50,35 @@ def read_sample_from_nexus(f_nexus: str):
         if len(l_key_sample) != 0:
             sample = components[l_key_sample[0]]
             sample_position = sample["Position"][()]
-            dg_out["sample_position"] = sc.vector(
-                value=sample_position, unit="m"
-            )
-
+            da_sample = sc.DataGroup({
+                "position":sc.vector(value=sample_position, unit="m"),
+                "omega": sc.scalar(
+                    d_simulation_param.get("sample_omega", 0.0), unit="deg."
+                    ).to(unit="rad", copy=False),
+                "chi": sc.scalar(
+                    d_simulation_param.get("sample_chi", 0.0), unit="deg."
+                    ).to(unit="rad", copy=False),
+                "phi": sc.scalar(
+                    d_simulation_param.get("sample_phi", 0.0), unit="deg."
+                    ).to(unit="rad", copy=False),
+                "offset": sc.vector(value=[0.0, 0.0, 0.0], unit="m"),
+            })
+            
+            dg_out["sample"] = da_sample
     return dg_out
 
 
 def read_detector_a_from_nexus(f_nexus: str):
     dg_out = sc.DataGroup()
     s_detector_a = "_arm_da"
-
+    d_simulation_param = simulation_params_to_dict(f_nexus)
     with h5py.File(f_nexus) as fid:
         components = fid["entry1"]["instrument"]["components"]
         simulation_param = fid["entry1"]["simulation"]["Param"]
         data = fid["entry1"]["data"]  #
 
-        gamma = float(simulation_param["da_gamma"][()][0].decode("ascii"))
-        casette_omega = float(
-            simulation_param["A_casette_omega"][()][0].decode("ascii")
-        )
+        gamma = float(d_simulation_param.get("da_gamma", 0.))
+        casette_omega = float(d_simulation_param.get("A_casette_omega", 0))
 
         l_key_detector = [hh for hh in components.keys() if s_detector_a in hh]
 
@@ -132,15 +159,14 @@ def read_detector_a_from_nexus(f_nexus: str):
 def read_detector_b_from_nexus(f_nexus: str):
     dg_out = sc.DataGroup()
     s_detector_b = "_arm_db"
+    d_simulation_param = simulation_params_to_dict(f_nexus)
     with h5py.File(f_nexus) as fid:
         components = fid["entry1"]["instrument"]["components"]
         simulation_param = fid["entry1"]["simulation"]["Param"]
         data = fid["entry1"]["data"]  #
 
-        gamma = float(simulation_param["db_gamma"][()][0].decode("ascii"))
-        casette_omega = float(
-            simulation_param["B_casette_omega"][()][0].decode("ascii")
-        )
+        gamma = float(d_simulation_param.get("db_gamma",0.))
+        casette_omega = float(d_simulation_param.get("B_casette_omega",0.))
 
         l_key_detector = [hh for hh in components.keys() if s_detector_b in hh]
 
@@ -224,10 +250,11 @@ def read_monitor_1_from_nexus(f_nexus: str):
     return dg_out
 
 
-def update_monitor_2_from_nexus(dg_out: sc.DataGroup):
-    if "tof_egs2_1_plot" in dg_out.keys():  # cave monitor
-        data_monitor = dg_out["tof_egs2_1_plot"]
-        d_components = dg_out["components"]
+def read_monitor_2_from_nexus(f_nexus:str):
+    dg_out = sc.DataGroup()
+    d_components = read_component_positions_from_nexus(f_nexus)
+    if "tof_egs2_1_plot" in d_components.keys():  # cave monitor
+        data_monitor = d_components["tof_egs2_1_plot"]
         da = sc.DataArray(
             data=sc.array(
                 dims=["counts"],
@@ -236,7 +263,7 @@ def update_monitor_2_from_nexus(dg_out: sc.DataGroup):
             ),
             coords={
                 "position": sc.vector(
-                    value=d_components["tof_egs2_1"]["position"], unit="m"
+                    value=d_components["components"]["tof_egs2_1"]["position"], unit="m"
                 ),
                 "toa": sc.array(
                     dims=["counts"],
@@ -247,11 +274,11 @@ def update_monitor_2_from_nexus(dg_out: sc.DataGroup):
         )
         dg_out["cave_monitor"] = da
 
-    return
+    return dg_out
 
 
 def read_component_positions_from_nexus(f_nexus: str):
-    dg_out = sc.DataGroup()
+    dg_out = {}
 
     with h5py.File(f_nexus) as fid:
         components = fid["entry1"]["instrument"]["components"]
@@ -287,42 +314,6 @@ def read_component_positions_from_nexus(f_nexus: str):
     return dg_out
 
 
-def read_simulated_data_from_nexus(f_nexus: str):
-    dg_out = sc.DataGroup()
-
-    with h5py.File(f_nexus) as fid:
-        simulation_param = fid["entry1"]["simulation"]["Param"]
-        d_simulation_param = {}
-        for s_key in simulation_param.keys():
-            try:
-                d_simulation_param[s_key] = float(
-                    simulation_param[s_key][()][0].decode("ascii")
-                )
-            except:
-                pass
-        dg_out["simulation_parameters"] = d_simulation_param
-
-        dg_out["sample_omega"] = sc.scalar(
-            d_simulation_param.get("sample_omega", 0.0), unit="deg."
-        ).to(unit="rad", copy=False)
-        dg_out["sample_chi"] = sc.scalar(
-            d_simulation_param.get("sample_chi", 0.0), unit="deg."
-        ).to(unit="rad", copy=False)
-        dg_out["sample_phi"] = sc.scalar(
-            d_simulation_param.get("sample_phi", 0.0), unit="deg."
-        ).to(unit="rad", copy=False)
-
-        # dg_out["da_gamma"] = d_simulation_param.get("da_gamma", 0.0)
-        # dg_out["da_casette_omega"] = d_simulation_param.get(
-        #     "A_casette_omega", 0.0
-        # )
-
-        # dg_out["db_gamma"] = d_simulation_param.get("db_gamma", 0.0)
-        # dg_out["db_casette_omega"] = d_simulation_param.get(
-        #     "B_casette_omega", 0.0
-        # )
-
-    return dg_out
 
 
 def read_magic_from_nexus(f_nexus):
@@ -331,21 +322,17 @@ def read_magic_from_nexus(f_nexus):
     dg_magic["delta_L"] = sc.scalar(0.0, unit="m")
     dg_magic["delta_t"] = sc.scalar(3.0, unit="ms").to(unit="s", copy=False)
 
-    dg_magic.update(read_simulated_data_from_nexus(f_nexus))
-    dg_magic.update(read_component_positions_from_nexus(f_nexus))
+    d_components = read_component_positions_from_nexus(f_nexus)
 
     dg_magic.update(read_source_from_nexus(f_nexus))
     dg_magic.update(read_sample_from_nexus(f_nexus))
     dg_magic.update(read_detector_a_from_nexus(f_nexus))
     dg_magic.update(read_detector_b_from_nexus(f_nexus))
     dg_magic.update(read_monitor_1_from_nexus(f_nexus))
-    update_monitor_2_from_nexus(dg_magic)
+    dg_magic.update(read_monitor_2_from_nexus(f_nexus))
+    
 
-    d_components = dg_magic["components"]
-    if "arm_w6" in d_components.keys():
-        dg_magic["source_position"] = sc.vector(
-            value=d_components["arm_w6"]["position"], unit="m"
-        )
+
     if "arm_egs2" in d_components.keys():
         dg_magic["tp_position"] = sc.vector(
             value=d_components["arm_egs2"]["position"], unit="m"

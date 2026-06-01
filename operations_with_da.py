@@ -49,7 +49,35 @@ def da_to_laue_hist(da, factor_border: float = 0.07):
     return data_laue
 
 
-def normalize_per_cave_monitor(da_q_event, da_cm, factor=0.1):
+
+
+def da_to_2d_hist(da, factor_border: float = 0.07):
+    da = da.transform_coords(
+        ("event_gamma", "event_nu", "voxel_ID_a"),
+        graph=magic_graphs.graph_detector,
+        rename_dims=False,
+    )
+    delta_gamma_event = sc.scalar(0.15, unit="deg").to(unit="rad")
+    gamma_min = da.coords["event_gamma"].min()
+    gamma_max = da.coords["event_gamma"].max()
+    num_gamma = int(((gamma_max - gamma_min) / delta_gamma_event).value)
+    bin_gamma = sc.linspace("event_gamma", gamma_min, gamma_max, num=num_gamma)
+
+    delta_nu_event = sc.scalar(0.333, unit="deg").to(unit="rad")
+    nu_min = da.coords["event_nu"].min()
+    nu_max = da.coords["event_nu"].max()
+    num_nu = int(((nu_max - nu_min) / delta_nu_event).value)
+    bin_nu = sc.linspace("event_nu", nu_min, nu_max, num=num_nu)
+
+    delta_toa = sc.scalar(0.1e-3, unit="s")
+    toa_min = da.coords["toa"].min()
+    toa_max = da.coords["toa"].max()
+    num_toa = int(((toa_max - toa_min) / delta_toa).value)
+    bin_toa = sc.linspace("toa", toa_min, toa_max, num=num_toa)
+    data_hist = da.hist(toa=bin_toa, event_nu=bin_nu, event_gamma=bin_gamma)
+    return data_hist
+
+def normalize_da_event_by_cave_monitor(da_q_event, da_cm, factor=0.1):
     da_cm = da_cm.transform_coords(
         ("wavelength",),
         graph=magic_graphs.graph_cave_monitor,
@@ -92,45 +120,57 @@ def normalize_per_cave_monitor(da_q_event, da_cm, factor=0.1):
     return da_q_event_reduced
 
 
-def da_to_2d_hist(da, factor_border: float = 0.07):
-    da = da.transform_coords(
-        ("event_gamma", "event_nu", "voxel_ID_a"),
-        graph=magic_graphs.graph_detector,
-        rename_dims=False,
+def normalize_da_event_by_vanadium_over_voxel(da_event, da_vanadium):
+    da_vanadium_voxel = sc.groupby(da_vanadium, "voxel_ID").sum("event")
+    normalized = da_event.group(da_vanadium_voxel.coords['voxel_ID']) / sc.values(da_vanadium_voxel)
+    da_event_normalized = normalized.bins.concat().value.copy()
+    for name, item in normalized.coords.items():
+        if name != "voxel_ID":
+            da_event_normalized.coords[name] = item.copy()
+    return da_event_normalized
+
+
+def normalize_da_event_by_vanadium_over_time(da_event, da_vanadium, factor: float = 0.03):
+    da_spectra = da_vanadium.hist(toa=1000)
+    da_spectra.masks["counts"] = sc.logical_not(
+        da_spectra.data > factor * da_spectra.data.max()
     )
-    delta_gamma_event = sc.scalar(0.15, unit="deg").to(unit="rad")
-    gamma_min = da.coords["event_gamma"].min()
-    gamma_max = da.coords["event_gamma"].max()
-    num_gamma = int(((gamma_max - gamma_min) / delta_gamma_event).value)
-    bin_gamma = sc.linspace("event_gamma", gamma_min, gamma_max, num=num_gamma)
-
-    delta_nu_event = sc.scalar(0.333, unit="deg").to(unit="rad")
-    nu_min = da.coords["event_nu"].min()
-    nu_max = da.coords["event_nu"].max()
-    num_nu = int(((nu_max - nu_min) / delta_nu_event).value)
-    bin_nu = sc.linspace("event_nu", nu_min, nu_max, num=num_nu)
-
-    delta_toa = sc.scalar(0.1e-3, unit="s")
-    toa_min = da.coords["toa"].min()
-    toa_max = da.coords["toa"].max()
-    num_toa = int(((toa_max - toa_min) / delta_toa).value)
-    bin_toa = sc.linspace("toa", toa_min, toa_max, num=num_toa)
-    data_hist = da.hist(toa=bin_toa, event_nu=bin_nu, event_gamma=bin_gamma)
-    return data_hist
+    spectra_toa = sc.midpoints(da_spectra.coords["toa"])[
+        sc.logical_not(da_spectra.masks["counts"])
+    ]
+    spectra_weight = da_spectra.data[sc.logical_not(da_spectra.masks["counts"])]
+    spectra_weight = spectra_weight / spectra_weight.max().values
 
 
-def normalize_da_hist_by_vanadium(da_hist, da_hist_vanadium):
-    np_w = da_hist_vanadium.sum("toa").values
-    np_w /= np_w.max()
-    np_w_unique = numpy.unique(np_w)
-    np_w[np_w == 0.0] = np_w_unique[1]
+    spectra_toa_min = spectra_toa.min()
+    spectra_toa_max = spectra_toa.max()
+    print(
+        f"Minimal toa is {spectra_toa_min.value:7.5f} {spectra_toa_min.unit}"
+    )
+    print(
+        f"Maximal toa is {spectra_toa_max.value:7.5f} {spectra_toa_max.unit}"
+    )
+
+    flag = sc.logical_and(
+            da_event.coords["toa"] > spectra_toa_min,
+            da_event.coords["toa"] < spectra_toa_max,
+    )
+    da_event_reduced = da_event[flag]
+    coeff = numpy.interp(
+        da_event_reduced.coords["toa"].values,
+            spectra_toa.values,
+            spectra_weight.values,
+    )
+    da_event_reduced.data = da_event_reduced.data / sc.array(
+        dims=("event",), values=coeff, unit=da_event_reduced.data.unit
+    )
+    return da_event_reduced
+
+
+def normalize_da_hist_by_vanadium_over_time(da_hist, da_hist_vanadium, factor: float = 0.03):
     da_hist_norm = da_hist.copy()
-    da_hist_norm.data.values /= np_w
-    da_hist_norm.data.variances /= np_w
-
     np_w_time = da_hist_vanadium.sum(("event_nu", "event_gamma")).values
     np_w_time /= np_w_time.max()
-    factor = 0.03
     flag_time = np_w_time > factor * np_w_time.max()
 
     np_time = (
@@ -142,7 +182,6 @@ def normalize_da_hist_by_vanadium(da_hist, da_hist_vanadium):
     )
     np_time_min = np_time.min()
     np_time_max = np_time.max()
-
     da_hist_norm = da_hist_norm[
         "toa",
         sc.scalar(np_time_min, unit="s") : sc.scalar(np_time_max, unit="s"),
@@ -154,7 +193,22 @@ def normalize_da_hist_by_vanadium(da_hist, da_hist_vanadium):
     np_w_time_2 = numpy.interp(np_time_2, np_time, np_w_time[flag_time])
     da_hist_norm.data.values /= numpy.expand_dims(np_w_time_2, axis=(1, 2))
     da_hist_norm.data.variances /= numpy.expand_dims(np_w_time_2, axis=(1, 2))
+    return da_hist_norm
 
+def normalize_da_hist_by_vanadium_over_angles(da_hist, da_hist_vanadium):
+    np_w = da_hist_vanadium.sum("toa").values
+    np_w /= np_w.max()
+    np_w_unique = numpy.unique(np_w)
+    np_w[np_w == 0.0] = np_w_unique[1]
+    da_hist_norm = da_hist.copy()
+    da_hist_norm.data.values /= np_w
+    da_hist_norm.data.variances /= np_w
+    return da_hist_norm
+
+
+def normalize_da_hist_by_vanadium(da_hist, da_hist_vanadium, factor_time: float = 0.03):
+    da_hist_norm = normalize_da_hist_by_vanadium_over_angles(da_hist, da_hist_vanadium)
+    da_hist_norm = normalize_da_hist_by_vanadium_over_time(da_hist_norm, da_hist_vanadium, factor=factor_time)
     return da_hist_norm
 
 
@@ -174,16 +228,77 @@ def find_peaks_hist(data_event_hist, threshold: float = 0.1):
         np_data, peak_labels, range(1, peak_number + 1)
     )
 
-    # bin_gamma = data_event_hist.coords['gamma_event']
-    # ind_gamma_centers = [hh[2] for hh in peak_centers]
-    # gamma_centers = numpy.interp(ind_gamma_centers, range(bin_gamma.size), bin_gamma.values)
 
-    # bin_nu = data_event_hist.coords['nu_event']
-    # ind_nu_centers = [hh[1] for hh in peak_centers]
-    # nu_centers = numpy.interp(ind_nu_centers, range(bin_nu.size), bin_nu.values)
+    np_data = data_event_hist.data.values
 
-    # bin_toa = data_event_hist.coords['toa']
-    # ind_toa_centers = [hh[0] for hh in peak_centers]
-    # toa_centers = numpy.interp(ind_toa_centers, range(bin_toa.size), bin_toa.values)
+    print('# 1) centers of mass (fast C implementation)')
+    peak_centers = center_of_mass(np_data, peak_labels, range(1, peak_number+1))
 
-    return peak_labels, peak_number
+    print('# 2) coordinate grids: toa, nu, gamma')
+    x,y,z = numpy.indices(peak_labels.shape)
+    x_sq, y_sq, z_sq = numpy.square(x), numpy.square(y), numpy.square(z)
+
+    print('# 3) compute weighted sums of squared coordinates')
+    sum_w   = numpy.array([ndi_sum(np_data, peak_labels, i) for i in range(1, peak_number+1)])
+    sum_x2  = numpy.array([ndi_sum(np_data * x**2, peak_labels, i) for i in range(1, peak_number+1)])
+    sum_y2  = numpy.array([ndi_sum(np_data * y**2, peak_labels, i) for i in range(1, peak_number+1)])
+    sum_z2  = numpy.array([ndi_sum(np_data * z**2, peak_labels, i) for i in range(1, peak_number+1)])
+
+    print('# 4) second moments')
+    mean_z2 = sum_z2 / sum_w
+    mean_y2 = sum_y2 / sum_w
+    mean_x2 = sum_x2 / sum_w
+
+    print('# 5) first moments (centers)')
+    cx, cy, cz = numpy.array(peak_centers).T
+
+    print('# 6) variances')
+    var_x = mean_x2 - cx**2
+    var_y = mean_y2 - cy**2
+    var_z = mean_z2 - cz**2
+
+
+    np_ind_toa = numpy.array(peak_centers)[:,0]
+    np_ind_nu = numpy.array(peak_centers)[:,1]
+    np_ind_gamma = numpy.array(peak_centers)[:,2]
+
+    np_hist_toa = data_event_hist.coords['toa'].values
+    np_hist_gamma = data_event_hist.coords['event_gamma'].values
+    np_hist_nu = data_event_hist.coords['event_nu'].values
+
+    np_toa = numpy.interp(np_ind_toa, range(np_hist_toa.size), np_hist_toa)
+    np_gamma = numpy.interp(np_ind_gamma, range(np_hist_gamma.size), np_hist_gamma)
+    np_nu = numpy.interp(np_ind_nu, range(np_hist_nu.size), np_hist_nu)
+
+    sig_toa = numpy.interp(np_ind_toa+numpy.sqrt(var_x), range(np_hist_toa.size), np_hist_toa) - np_toa
+    sig_gamma = numpy.interp(np_ind_gamma+numpy.sqrt(var_y), range(np_hist_gamma.size), np_hist_gamma) - np_gamma
+    sig_nu = numpy.interp(np_ind_nu+numpy.sqrt(var_z), range(np_hist_nu.size), np_hist_nu) - np_nu
+    
+    return np_toa, np_gamma, np_nu, sig_toa, sig_gamma, sig_nu
+
+def assign_event_peak_to_da(data_event, np_toa, np_gamma, np_nu, sig_toa, sig_gamma, sig_nu, range_sigma:float=2.):
+    np_event_peak = numpy.zeros((data_event.size, ), dtype=int)
+    for i_peak in range(np_toa.size):
+        print(f'{100*(i_peak+1)/np_toa.size:.1f}%',end='\r')
+        toa, gamma, nu = np_toa[i_peak], np_gamma[i_peak], np_nu[i_peak]
+        stoa, sgamma, snu = sig_toa[i_peak], sig_gamma[i_peak], sig_nu[i_peak]
+        toa_min, toa_max = toa - range_sigma * stoa, toa + range_sigma * stoa
+        gamma_min, gamma_max = gamma - range_sigma * sgamma, gamma + range_sigma * sgamma
+        nu_min, nu_max = nu - range_sigma * snu, nu + range_sigma * snu
+
+        flag_toa = sc.logical_and(
+            data_event.coords['toa'] > sc.scalar(toa_min, unit='s'),
+            data_event.coords['toa'] < sc.scalar(toa_max, unit='s')
+        )
+        flag_gamma = sc.logical_and(
+            data_event.coords['event_gamma'] > sc.scalar(gamma_min, unit='rad'),
+            data_event.coords['event_gamma'] < sc.scalar(gamma_max, unit='rad')
+        )
+        flag_nu = sc.logical_and(
+            data_event.coords['event_nu'] > sc.scalar(nu_min, unit='rad'),
+            data_event.coords['event_nu'] < sc.scalar(nu_max, unit='rad')
+        )
+        np_flag = sc.logical_and(flag_toa, sc.logical_and(flag_gamma, flag_nu)).values
+        np_event_peak[np_flag] = i_peak + 1
+    data_event.coords['event_peak'] = sc.array(dims=['event',], values= np_event_peak, dtype=int)
+    return
