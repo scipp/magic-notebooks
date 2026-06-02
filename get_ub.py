@@ -6,7 +6,7 @@ import scipp as sc
 
 def get_euleur_opt(
         cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma, 
-        Q_vec_rot, weight,
+        Q_vec_rot, sigma_Q_vec_rot,
         euler_alpha, euler_beta, euler_gamma, graph_hkl=magic_graphs.graph_hkl,
         relfine_unit_cell=False,singony='triclinic'):
     """
@@ -28,8 +28,8 @@ def get_euleur_opt(
     hkl : (N,3) array
         Refined fractional hkl values.
     """
-    np_weight = numpy.asarray(weight) # values
-    np_weight = np_weight / numpy.max(np_weight)
+    # np_weight = numpy.asarray(weight) # values
+    # np_weight = np_weight / numpy.max(np_weight)
 
     ea_rad = euler_alpha.to(unit="rad", copy=False).value
     eb_rad = euler_beta.to(unit="rad", copy=False).value
@@ -109,8 +109,8 @@ def get_euleur_opt(
         sc_hkl_int = graph_hkl["hkl_vec"](ub_matrix=sc_UB, Q_vec_rot=Q_vec_rot)
         sc_hkl_int.values = numpy.round(sc_hkl_int.values,0) 
         Q_vec_rot_ref = magic_graphs.graph_hkl_inv["Q_vec_rot"](ub_matrix=sc_UB, hkl_vec=sc_hkl_int)
-        Q_vec_rot_diff = Q_vec_rot_ref - Q_vec_rot
-        chi_sq = (numpy.square(Q_vec_rot_diff.values)* numpy.expand_dims(np_weight, axis=1)).sum()
+        Q_vec_rot_diff = (Q_vec_rot_ref - Q_vec_rot).values/sigma_Q_vec_rot.values
+        chi_sq = (numpy.square(Q_vec_rot_diff)).sum() # * numpy.expand_dims(np_weight, axis=1)
         return chi_sq
 
 

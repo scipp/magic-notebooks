@@ -330,14 +330,13 @@ def read_magic_from_nexus(f_nexus):
     dg_magic.update(read_detector_b_from_nexus(f_nexus))
     dg_magic.update(read_monitor_1_from_nexus(f_nexus))
     dg_magic.update(read_monitor_2_from_nexus(f_nexus))
-    
 
-
-    if "arm_egs2" in d_components.keys():
-        dg_magic["tp_position"] = sc.vector(
-            value=d_components["arm_egs2"]["position"], unit="m"
-        )
-
+    # if "arm_egs2" in d_components.keys():
+    #     dg_magic["tp_position"] = sc.vector(
+    #         value=d_components["arm_egs2"]["position"], unit="m"
+    #     )
+    if 'tp_position' in d_components.keys():
+        dg_magic["tp_position"] = d_components["tp_position"]
     return dg_magic
 
 

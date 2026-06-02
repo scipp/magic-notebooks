@@ -302,3 +302,28 @@ def assign_event_peak_to_da(data_event, np_toa, np_gamma, np_nu, sig_toa, sig_ga
         np_event_peak[np_flag] = i_peak + 1
     data_event.coords['event_peak'] = sc.array(dims=['event',], values= np_event_peak, dtype=int)
     return
+
+def calc_da_peaks_for_event_peak(da_event: sc.DataArray) -> sc.DataArray:
+    l_weight, l_q_aver, l_var_q_aver = [], [], [] 
+    for i_peak in range(da_event.coords['event_peak'].max()):
+        flag_peak = da_event.coords['event_peak'] == i_peak+1
+        np_w = numpy.expand_dims(da_event.data[flag_peak].values, axis=1)
+        np_q = da_event.coords['Q_vec_rot'][flag_peak].values
+        weight = numpy.sum(np_w)
+        np_q_aver = (np_q * np_w).sum(axis=0)/weight
+        np_var_q_aver = (numpy.square(np_q) * np_w).sum(axis=0)/weight - numpy.square(np_q_aver)
+        l_weight.append(weight)
+        l_q_aver.append(np_q_aver)
+        l_var_q_aver.append(np_var_q_aver)
+
+    intensity = sc.array(dims=['peaks'], values=l_weight, unit='counts')
+    peaks_q = sc.vectors(dims=['peaks'], values=l_q_aver, unit=da_event.coords['Q_vec_rot'].unit)
+    sigma_peaks_q = sc.vectors(dims=['peaks'], values=numpy.sqrt(l_var_q_aver), unit=da_event.coords['Q_vec_rot'].unit)
+    da_peaks = sc.DataArray(
+                data=intensity,
+            coords={
+                'Q_vec_rot': peaks_q,
+                'sigma_Q_vec_rot': sigma_peaks_q,
+            }
+            )
+    return da_peaks
