@@ -97,6 +97,7 @@ fig_rbuttons = widgets.RadioButtons(
     options=[
         "3D Laue Pattern",
         "2D Pattern",
+        "TOF-2Theta",
         "Monitor Data",
         "3D Normalization Data",
         "2D Normalization Data",
