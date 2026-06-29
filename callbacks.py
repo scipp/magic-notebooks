@@ -132,8 +132,8 @@ def display_data(b):
             )
             STATE.data_event_hist = da_2d
             rad_to_deg = da_2d.assign_coords(
-                gamma_event=da_2d.coords["event_gamma"].to(unit="deg"),
-                nu_event=da_2d.coords["event_nu"].to(unit="deg"),
+                event_gamma=da_2d.coords["event_gamma"].to(unit="deg"),
+                event_nu=da_2d.coords["event_nu"].to(unit="deg"),
             )
             fig = plopp.inspector(
                 rad_to_deg,
