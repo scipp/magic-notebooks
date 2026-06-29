@@ -19,6 +19,9 @@ import peak_find
 import operations_with_da
 import integrate_peaks
 
+def assign_dg_to_da_coords(dg: sc.DataGroup, da: sc.DataArray, prefix:str=""):
+    for s_key in dg.keys():
+        da.coords[f"{prefix}_{s_key}"] = dg[s_key]
 
 def load_file(b):
     with output_data:
@@ -55,9 +58,9 @@ def load_file(b):
             print(f"Error reading file: {e}")
             return
         STATE.magic_data = d_out
-        STATE.detector_a_event = d_out["detector_a"]
-        STATE.detector_b_event = d_out["detector_b"]
-        STATE.monitor_cave = d_out["cave_monitor"]
+        STATE.detector_a_event = d_out.get("detector_a", None)
+        STATE.detector_b_event = d_out.get("detector_b", None)
+        STATE.monitor_cave = d_out.get("cave_monitor", None)
 
         file_path = fc_vanadium.selected
         if not file_path is None and os.path.isfile(file_path):
@@ -65,9 +68,9 @@ def load_file(b):
                 d_out = read_h5.read_magic_from_nexus(file_path)
 
                 STATE_VANADIUM.magic_data = d_out
-                STATE_VANADIUM.detector_a_event = d_out["detector_a"]
-                STATE_VANADIUM.detector_b_event = d_out["detector_b"]
-                STATE_VANADIUM.monitor_cave = d_out["cave_monitor"]
+                STATE_VANADIUM.detector_a_event = d_out.get("detector_a", None)
+                STATE_VANADIUM.detector_b_event = d_out.get("detector_b", None)
+                STATE_VANADIUM.monitor_cave = d_out.get("cave_monitor", None)
 
             except Exception as e:
                 print(f"Error reading file: {e}")
@@ -93,26 +96,26 @@ def display_data(b):
         print(fig_rbuttons.value)
         flag_display_center = True
         if fig_rbuttons.value == "3D Laue Pattern":
+            d_plot = {}
+            vmax = 0.
             da_det_a = STATE.detector_a_event
-            da_det_a_laue = operations_with_da.da_to_laue_hist(
-                da_det_a, factor_border=0.00
-            )
+            if da_det_a is not None:
+                da_det_a_laue = operations_with_da.da_to_laue_hist(
+                    da_det_a, factor_border=0.00
+                )
+                vmax = max([vmax, numpy.quantile(da_det_a_laue.data.values, 0.9)])
+                d_plot["detector A"] = da_det_a_laue
 
             da_det_b = STATE.detector_b_event
-            da_det_b_laue = operations_with_da.da_to_laue_hist(
-                da_det_b, factor_border=0.00
-            )
-            vmax = max(
-                [
-                    numpy.quantile(da_det_a_laue.data.values, 0.9),
-                    numpy.quantile(da_det_b_laue.data.values, 0.9),
-                ]
-            )
+            if da_det_b is not None:
+                da_det_b_laue = operations_with_da.da_to_laue_hist(
+                    da_det_b, factor_border=0.00
+                )
+                vmax = max([vmax, numpy.quantile(da_det_b_laue.data.values, 0.9)])
+                d_plot["detector B"] = da_det_b_laue
+
             fig = plopp.scatter3d(
-                {
-                    "detector A": da_det_a_laue,
-                    "detector B": da_det_b_laue,
-                },
+                d_plot,
                 pos="event_position_global",
                 cbar=True,
                 size=0.005,
@@ -121,6 +124,9 @@ def display_data(b):
             )
         elif fig_rbuttons.value == "2D Pattern":
             data_event = STATE.detector_a_event
+            if data_event is None:
+                clear_output()
+                return
             da_2d = operations_with_da.da_to_2d_hist(
                 data_event, factor_border=0.07
             )
@@ -137,8 +143,35 @@ def display_data(b):
                 mode="rectangle",
                 autoscale=True,
             )
+        elif fig_rbuttons.value == "TOF-2Theta":
+            data_event = STATE.detector_a_event
+            if data_event is None:
+                clear_output()
+                return
+            dg_magic = STATE.magic_data
+            assign_dg_to_da_coords(dg_magic['sample'], data_event, prefix="sample")
+            data_event.coords['tp_position'] = dg_magic['tp_position']
+            data_event.coords['source_position'] = dg_magic['source_position']
+            data_event.coords['delta_L'] = dg_magic['delta_L']
+            data_event.coords['delta_t'] = dg_magic['delta_t']
+
+
+            data_event = data_event.transform_coords(
+            ("two_theta",), graph={**magic_graphs.graph_qvec, **magic_graphs.graph_detector}
+            )
+            rad_to_deg = data_event.assign_coords(
+                two_theta=data_event.coords["two_theta"].to(unit="deg"),
+            )
+            rad_to_deg_hist = rad_to_deg.hist(two_theta=120, toa=1000)
+            fig = plopp.plot(
+                rad_to_deg_hist,
+                coords=['toa', 'two_theta'],
+            )
         elif fig_rbuttons.value == "3D Normalization Data":
             data_event = STATE_VANADIUM.detector_a_event
+            if data_event is None:
+                clear_output()
+                return
             da_laue = operations_with_da.da_to_laue_hist(
                 data_event, factor_border=0.07
             )
@@ -153,6 +186,9 @@ def display_data(b):
             )
         elif fig_rbuttons.value == "2D Normalization Data":
             data_event = STATE_VANADIUM.detector_a_event
+            if data_event is None:
+                clear_output()
+                return
             da_2d = operations_with_da.da_to_2d_hist(
                 data_event, factor_border=0.07
             )
@@ -171,6 +207,9 @@ def display_data(b):
             )
         elif fig_rbuttons.value == "Monitor Data":
             data_cave_monitor = STATE.monitor_cave
+            if data_cave_monitor is None:
+                clear_output()
+                return
             fig = data_cave_monitor.hist(toa=101).plot()
         else:
             flag_display_center = False
