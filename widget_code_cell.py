@@ -1,5 +1,6 @@
 from IPython.utils.capture import capture_output
 
+import inspect
 import ipywidgets
 import ast
 from IPython.display import display
@@ -21,17 +22,26 @@ def execute_with_last_expr(code, global_ns):
         exec(code, global_ns)
         return None
     
-# Global namespace shared with the rest of your application
-EXEC_GLOBALS = globals()
 
 
-def make_code_cell(initial_text:str="", placeholder:str="Write Python code here...\n\n", width:str="95%", height:str='200px'):
+def make_code_cell(initial_text:str="", placeholder:str="Write Python code here...\n\n", width:str="95%", height:str='200px', global_ns=None):
     """
     Creates a mini notebook-like code cell:
     - Text area for Python code
     - Run button
     - Output area
     """
+    if global_ns is None:
+        frame = inspect.currentframe()
+        try:
+            if frame is not None and frame.f_back is not None:
+                caller_frame = frame.f_back
+                global_ns = dict(caller_frame.f_globals)
+                global_ns.update(caller_frame.f_locals)
+            else:
+                global_ns = globals()
+        finally:
+            del frame
     css = ipywidgets.HTML("""
     <style>
     textarea {
@@ -66,11 +76,10 @@ def make_code_cell(initial_text:str="", placeholder:str="Write Python code here.
 
         code = code_area.value
 
-
         try:
             with output:
                 # exec(code, EXEC_GLOBALS)
-                result = execute_with_last_expr(code, EXEC_GLOBALS)
+                result = execute_with_last_expr(code, global_ns)
                 if result is not None:
                     display(result)
         except Exception:
