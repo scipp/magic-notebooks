@@ -160,8 +160,8 @@ def calc_unit_cell_parameters_by_b_matrix(b_matrix):
 def calc_norm_q(Q_vec):
     return sc.norm(Q_vec)
 
-def calc_voxel_id_vsac(voxel_ID, N_vs, N_a, N_c, ID_0):
-    np_id = voxel_ID.values
+def calc_voxel_id_vsac(detector_number, N_vs, N_a, N_c, ID_0):
+    np_id = detector_number.values
     
     det = DetectorA(
         N_vs = N_vs.value,
@@ -180,15 +180,15 @@ def calc_voxel_id_vsac(voxel_ID, N_vs, N_a, N_c, ID_0):
     )
     n_vs, n_a, n_c = det._calc_n_vsac_by_id(np_id)
     voxel_ID_VS = sc.array(
-                        dims=voxel_ID.dims,
+                        dims=detector_number.dims,
                         values=n_vs,
                     )
     voxel_ID_a = sc.array(
-                        dims=voxel_ID.dims,
+                        dims=detector_number.dims,
                         values=n_a,
                     )
     voxel_ID_c = sc.array(
-                        dims=voxel_ID.dims,
+                        dims=detector_number.dims,
                         values=n_c,
                     )
     return {'voxel_ID_VS':voxel_ID_VS, 'voxel_ID_a':voxel_ID_a, 'voxel_ID_c':voxel_ID_c}

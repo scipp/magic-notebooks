@@ -32,7 +32,7 @@ def apply_detector_border(da, factor_border=0.07):
 
 
 def da_to_laue_hist(da, factor_border: float = 0.07):
-    data_laue = sc.groupby(da, "voxel_ID").sum("event")
+    data_laue = da.hist()
     data_laue = data_laue.transform_coords(
         (
             "event_position_local",
