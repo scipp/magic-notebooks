@@ -124,7 +124,7 @@ def read_detector_a_from_nexus(f_nexus: str):
                         values=data_events[:, ind_x : (ind_z + 1)],
                         unit="m",
                     ),
-                    "voxel_ID": sc.array(
+                    "detector_number": sc.array(
                         dims=["event"],
                         values=np_id,
                     ),
@@ -152,6 +152,8 @@ def read_detector_a_from_nexus(f_nexus: str):
                     ),
                 },
             )
+            da = da.group('detector_number')
+            # da = da.rename_dims({'voxel_ID': 'detector_number'})
             dg_out["detector_a"] = da
     return dg_out
 
@@ -212,7 +214,7 @@ def read_detector_b_from_nexus(f_nexus: str):
                         values=data_events[:, ind_x : (ind_z + 1)],
                         unit="m",
                     ),
-                    "voxel_ID": sc.array(
+                    "detector_number": sc.array(
                         dims=["event"],
                         values=np_id,
                     ),
@@ -240,6 +242,8 @@ def read_detector_b_from_nexus(f_nexus: str):
                     ),
                 },
             )
+            da = da.group('detector_number')
+            # da = da.rename_dims({'voxel_ID': 'detector_number'})
             dg_out["detector_b"] = da
 
     return dg_out
