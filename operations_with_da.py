@@ -331,19 +331,25 @@ def find_peaks_hist(data_event_hist, threshold: float = 0.1):
 
 def assign_event_peak_to_da(
     data_event,
-    np_toa,
-    np_gamma,
-    np_nu,
-    sig_toa,
-    sig_gamma,
-    sig_nu,
+    sc_toa,
+    sc_gamma,
+    sc_nu,
+    sc_sig_toa,
+    sc_sig_gamma,
+    sc_sig_nu,
     range_sigma: float = 2.0,
 ):
     np_event_peak = numpy.zeros((data_event.size,), dtype=int)
-    for i_peak in range(np_toa.size):
-        print(f"{100*(i_peak+1)/np_toa.size:.1f}%", end="\r")
-        toa, gamma, nu = np_toa[i_peak], np_gamma[i_peak], np_nu[i_peak]
-        stoa, sgamma, snu = sig_toa[i_peak], sig_gamma[i_peak], sig_nu[i_peak]
+    sc_toa = sc_toa.to(unit=data_event.coords["toa"].unit)
+    sc_gamma = sc_gamma.to(unit=data_event.coords["event_gamma"].unit)
+    sc_nu = sc_nu.to(unit=data_event.coords["event_nu"].unit)
+    sc_sig_toa = sc_sig_toa.to(unit=data_event.coords["toa"].unit)
+    sc_sig_gamma = sc_sig_gamma.to(unit=data_event.coords["event_gamma"].unit)
+    sc_sig_nu = sc_sig_nu.to(unit=data_event.coords["event_nu"].unit)
+    for i_peak in range(sc_toa.size):
+        print(f"{100*(i_peak+1)/sc_toa.size:.1f}%", end="\r")
+        toa, gamma, nu = sc_toa[i_peak], sc_gamma[i_peak], sc_nu[i_peak]
+        stoa, sgamma, snu = sc_sig_toa[i_peak], sc_sig_gamma[i_peak], sc_sig_nu[i_peak]
         toa_min, toa_max = toa - range_sigma * stoa, toa + range_sigma * stoa
         gamma_min, gamma_max = (
             gamma - range_sigma * sgamma,
@@ -351,19 +357,18 @@ def assign_event_peak_to_da(
         )
         nu_min, nu_max = nu - range_sigma * snu, nu + range_sigma * snu
 
+
         flag_toa = sc.logical_and(
-            data_event.coords["toa"] > sc.scalar(toa_min, unit="s"),
-            data_event.coords["toa"] < sc.scalar(toa_max, unit="s"),
+            data_event.coords["toa"] >  toa_min,
+            data_event.coords["toa"] < toa_max,
         )
         flag_gamma = sc.logical_and(
-            data_event.coords["event_gamma"]
-            > sc.scalar(gamma_min, unit="rad"),
-            data_event.coords["event_gamma"]
-            < sc.scalar(gamma_max, unit="rad"),
+            data_event.coords["event_gamma"] > gamma_min,
+            data_event.coords["event_gamma"] < gamma_max,
         )
         flag_nu = sc.logical_and(
-            data_event.coords["event_nu"] > sc.scalar(nu_min, unit="rad"),
-            data_event.coords["event_nu"] < sc.scalar(nu_max, unit="rad"),
+            data_event.coords["event_nu"] > nu_min,
+            data_event.coords["event_nu"] < nu_max,
         )
         np_flag = sc.logical_and(
             flag_toa, sc.logical_and(flag_gamma, flag_nu)
