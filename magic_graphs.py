@@ -160,6 +160,9 @@ def calc_unit_cell_parameters_by_b_matrix(b_matrix):
 def calc_sin_theta(two_theta):
     return sc.sin(0.5*two_theta)
 
+def calc_d_space(sin_theta, wavelength):
+    return 0.5*wavelength/sin_theta
+
 def calc_norm_q(Q_vec):
     return sc.norm(Q_vec)
 
@@ -266,6 +269,7 @@ graph_qvec = {
     "Q_vec": scipp_graph["Q_vec"],
     "two_theta": scipp_graph["two_theta"],
     "sin_theta": calc_sin_theta,
+    "d_space": calc_d_space,
     "norm_Q": calc_norm_q,
     "wavelength": scipp_graph["wavelength"],
     ("Qx","Qy","Qz"): scipp_graph[("Qx","Qy","Qz")],
