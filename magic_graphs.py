@@ -157,6 +157,9 @@ def calc_unit_cell_parameters_by_b_matrix(b_matrix):
     cell_gamma = sc.scalar(abg[2], unit="deg")
     return (cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma)
 
+def calc_sin_theta(two_theta):
+    return sc.sin(0.5*two_theta)
+
 def calc_norm_q(Q_vec):
     return sc.norm(Q_vec)
 
@@ -262,6 +265,7 @@ graph_qvec = {
     "scattered_beam": calc_scattered_beam,
     "Q_vec": scipp_graph["Q_vec"],
     "two_theta": scipp_graph["two_theta"],
+    "sin_theta": calc_sin_theta,
     "norm_Q": calc_norm_q,
     "wavelength": scipp_graph["wavelength"],
     ("Qx","Qy","Qz"): scipp_graph[("Qx","Qy","Qz")],
