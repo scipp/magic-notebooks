@@ -9,7 +9,10 @@ from scipy.ndimage import (
     binary_dilation,
     sum as ndi_sum,
 )
-
+import np_cryst_functions
+import peak_find_scipy
+import peak_find_skimage
+import peak_find_multiresolution
 
 def apply_detector_border(da, factor_border=0.07):
     if "detector_border" in da.masks.keys():
@@ -50,31 +53,31 @@ def da_to_laue_hist(da, factor_border: float = 0.07):
     return data_laue
 
 
-def da_to_2d_hist(da, factor_border: float = 0.07):
-    da = da.transform_coords(
-        ("event_gamma", "event_nu", "voxel_ID_a"),
-        graph=magic_graphs.graph_detector,
-        rename_dims=False,
-    )
-    delta_gamma_event = sc.scalar(0.15, unit="deg").to(unit="rad")
-    gamma_min = da.coords["event_gamma"].min()
-    gamma_max = da.coords["event_gamma"].max()
-    num_gamma = int(((gamma_max - gamma_min) / delta_gamma_event).value)
-    bin_gamma = sc.linspace("event_gamma", gamma_min, gamma_max, num=num_gamma)
+# def da_to_2d_hist(da, factor_border: float = 0.07):
+#     da = da.transform_coords(
+#         ("event_gamma", "event_nu", "voxel_ID_a"),
+#         graph=magic_graphs.graph_detector,
+#         rename_dims=False,
+#     )
+#     delta_gamma_event = sc.scalar(0.15, unit="deg").to(unit="rad")
+#     gamma_min = da.coords["event_gamma"].min()
+#     gamma_max = da.coords["event_gamma"].max()
+#     num_gamma = int(((gamma_max - gamma_min) / delta_gamma_event).value)
+#     bin_gamma = sc.linspace("event_gamma", gamma_min, gamma_max, num=num_gamma)
 
-    delta_nu_event = sc.scalar(0.333, unit="deg").to(unit="rad")
-    nu_min = da.coords["event_nu"].min()
-    nu_max = da.coords["event_nu"].max()
-    num_nu = int(((nu_max - nu_min) / delta_nu_event).value)
-    bin_nu = sc.linspace("event_nu", nu_min, nu_max, num=num_nu)
+#     delta_nu_event = sc.scalar(0.333, unit="deg").to(unit="rad")
+#     nu_min = da.coords["event_nu"].min()
+#     nu_max = da.coords["event_nu"].max()
+#     num_nu = int(((nu_max - nu_min) / delta_nu_event).value)
+#     bin_nu = sc.linspace("event_nu", nu_min, nu_max, num=num_nu)
 
-    delta_toa = sc.scalar(0.1e-3, unit="s")
-    toa_min = da.coords["toa"].min()
-    toa_max = da.coords["toa"].max()
-    num_toa = int(((toa_max - toa_min) / delta_toa).value)
-    bin_toa = sc.linspace("toa", toa_min, toa_max, num=num_toa)
-    data_hist = da.hist(toa=bin_toa, event_nu=bin_nu, event_gamma=bin_gamma)
-    return data_hist
+#     delta_toa = sc.scalar(0.1e-3, unit="s")
+#     toa_min = da.coords["toa"].min()
+#     toa_max = da.coords["toa"].max()
+#     num_toa = int(((toa_max - toa_min) / delta_toa).value)
+#     bin_toa = sc.linspace("toa", toa_min, toa_max, num=num_toa)
+#     data_hist = da.hist(toa=bin_toa, event_nu=bin_nu, event_gamma=bin_gamma)
+#     return data_hist
 
 
 def normalize_da_event_by_cave_monitor(da_q_event, da_cm, factor=0.1):
@@ -226,107 +229,26 @@ def normalize_da_hist_by_vanadium(
     return da_hist_norm
 
 
-def find_peaks_hist(data_event_hist, threshold: float = 0.1):
+def find_peaks_hist(da_hist, threshold: float = 0.1, flag_variance:bool=True):
     # Threshold from 0. to 1.
     """Find peaks by events"""
-    np_data = data_event_hist.values
-    np_flag_peaks = (
-        np_data > threshold * (np_data.max() - np_data.min()) + np_data.min()
-    )
-    np_flag_peaks = binary_dilation(np_flag_peaks, iterations=2).astype(
-        np_flag_peaks.dtype
-    )
-    peak_labels, peak_number = label(np_flag_peaks)
-    print(f"Number of peaks is {peak_number}")
-    peak_centers = center_of_mass(
-        np_data, peak_labels, range(1, peak_number + 1)
-    )
+    np_data = da_hist.values
 
-    np_data = data_event_hist.data.values
+    # np_ind_xyz, np_var_xyz, np_intensity = peak_find_scipy.find_peaks_in_np_array_nd(np_data, threshold=threshold, max_peak_number=1000, flag_variance=flag_variance)
+    np_ind_xyz, np_var_xyz, np_intensity = peak_find_skimage.find_peaks_skimage(np_data, threshold=threshold, max_peak_number=1000, flag_variance=flag_variance)
+    # np_ind_xyz, np_var_xyz, np_intensity = peak_find_multiresolution.find_peaks_multiresolution_3d(np_data, threshold_rel=threshold, max_peak_number_per_scale=1000, flag_variance=flag_variance)
+    d_coords = {}
+    for ind, s_ax in enumerate(da_hist.data.dims):
+        np_hist = da_hist.coords[s_ax].values
+        np_peak = numpy.interp(np_ind_xyz[ind], range(np_hist.size), np_hist)
+        s_unit = da_hist.coords[s_ax].unit
+        d_coords[s_ax] = sc.Variable(dims=('peak',), values = np_peak, unit=s_unit)
+        if flag_variance:
+            sig_peak = numpy.abs(numpy.interp(np_ind_xyz[ind] + numpy.sqrt(np_var_xyz[ind]), range(np_hist.size), np_hist) - np_peak)
+            d_coords[s_ax+"_sigma"] = sc.Variable(dims=('peak',), values = sig_peak, unit=s_unit)
+    da_peak = sc.DataArray(data=sc.Variable(dims=('peak',), values=np_intensity, unit=''), coords = d_coords)
 
-    print("# 1) centers of mass (fast C implementation)")
-    peak_centers = center_of_mass(
-        np_data, peak_labels, range(1, peak_number + 1)
-    )
-
-    print("# 2) coordinate grids: toa, nu, gamma")
-    x, y, z = numpy.indices(peak_labels.shape)
-    x_sq, y_sq, z_sq = numpy.square(x), numpy.square(y), numpy.square(z)
-
-    print("# 3) compute weighted sums of squared coordinates")
-    sum_w = numpy.array(
-        [ndi_sum(np_data, peak_labels, i) for i in range(1, peak_number + 1)]
-    )
-    sum_x2 = numpy.array(
-        [
-            ndi_sum(np_data * x**2, peak_labels, i)
-            for i in range(1, peak_number + 1)
-        ]
-    )
-    sum_y2 = numpy.array(
-        [
-            ndi_sum(np_data * y**2, peak_labels, i)
-            for i in range(1, peak_number + 1)
-        ]
-    )
-    sum_z2 = numpy.array(
-        [
-            ndi_sum(np_data * z**2, peak_labels, i)
-            for i in range(1, peak_number + 1)
-        ]
-    )
-
-    print("# 4) second moments")
-    mean_z2 = sum_z2 / sum_w
-    mean_y2 = sum_y2 / sum_w
-    mean_x2 = sum_x2 / sum_w
-
-    print("# 5) first moments (centers)")
-    cx, cy, cz = numpy.array(peak_centers).T
-
-    print("# 6) variances")
-    var_x = mean_x2 - cx**2
-    var_y = mean_y2 - cy**2
-    var_z = mean_z2 - cz**2
-
-    np_ind_toa = numpy.array(peak_centers)[:, 0]
-    np_ind_nu = numpy.array(peak_centers)[:, 1]
-    np_ind_gamma = numpy.array(peak_centers)[:, 2]
-
-    np_hist_toa = data_event_hist.coords["toa"].values
-    np_hist_gamma = data_event_hist.coords["event_gamma"].values
-    np_hist_nu = data_event_hist.coords["event_nu"].values
-
-    np_toa = numpy.interp(np_ind_toa, range(np_hist_toa.size), np_hist_toa)
-    np_gamma = numpy.interp(
-        np_ind_gamma, range(np_hist_gamma.size), np_hist_gamma
-    )
-    np_nu = numpy.interp(np_ind_nu, range(np_hist_nu.size), np_hist_nu)
-
-    sig_toa = (
-        numpy.interp(
-            np_ind_toa + numpy.sqrt(var_x),
-            range(np_hist_toa.size),
-            np_hist_toa,
-        )
-        - np_toa
-    )
-    sig_gamma = (
-        numpy.interp(
-            np_ind_gamma + numpy.sqrt(var_y),
-            range(np_hist_gamma.size),
-            np_hist_gamma,
-        )
-        - np_gamma
-    )
-    sig_nu = (
-        numpy.interp(
-            np_ind_nu + numpy.sqrt(var_z), range(np_hist_nu.size), np_hist_nu
-        )
-        - np_nu
-    )
-
-    return np_toa, np_gamma, np_nu, sig_toa, sig_gamma, sig_nu
+    return da_peak
 
 
 def assign_event_peak_to_da(

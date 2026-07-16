@@ -161,3 +161,16 @@ def calc_b_matrix(cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma):
             [zero, zero, b_33],
         ],dtype=float)
     return b_matrix
+
+
+def calc_tth_phi_by_gamma_nu(gamma, nu):
+    tth = numpy.arccos(numpy.cos(gamma) * numpy.cos(nu))
+    phi = numpy.atan2(numpy.tan(nu), numpy.sin(gamma))
+    return tth, phi
+
+
+def calc_gamma_nu_by_tth_phi(tth, phi):
+    gamma = numpy.atan2(numpy.tan(tth), numpy.cos(phi))
+    nu = numpy.arcsin(numpy.sin(tth), numpy.sin(phi))
+    return gamma, nu
+

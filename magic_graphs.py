@@ -3,6 +3,8 @@ import scipy
 from scippneutron.conversion import graph
 import scipp as sc
 from voxelization import calc_local_voxel_position_by_id_of_detector_a, DetectorA
+import np_cryst_functions
+
 
 def get_sc_rotation_matrix(r_matrix):
     quternion_r_matrix = scipy.spatial.transform.Rotation.from_matrix(r_matrix).as_quat()
@@ -243,6 +245,22 @@ def calc_gamma_nu_event(event_position_local, gamma):
         values=np_nu, 
         unit='rad')
     return {"event_gamma":event_gamma, "event_nu":event_nu, }
+
+
+def calc_tth_phi_event(event_gamma, event_nu):
+    np_gamma = event_gamma.to(unit="rad").values
+    np_nu = event_nu.to(unit="rad").values
+    np_tth, np_phi = np_cryst_functions.calc_tth_phi_by_gamma_nu(np_gamma, np_nu)
+    event_two_theta = sc.array(
+        dims=event_gamma.dims, 
+        values=np_tth, 
+        unit='rad')
+    event_phi = sc.array(
+        dims=event_gamma.dims, 
+        values=np_phi, 
+        unit='rad')
+    return {"event_two_theta":event_two_theta, "event_phi":event_phi, }
+
     
 scipp_graph = {**graph.beamline.beamline(scatter=True), **graph.tof.elastic_hkl(start='tof')}
 
@@ -253,6 +271,7 @@ graph_detector = {
     "event_position_global": calc_event_position_global,
     ("voxel_ID_VS", "voxel_ID_a", "voxel_ID_c"):calc_voxel_id_vsac,
     ("event_gamma", "event_nu"): calc_gamma_nu_event,
+    ("event_two_theta", "event_phi"): calc_tth_phi_event,
     "event_position_local": calc_event_position_local_by_pixel_id,
     
 }
