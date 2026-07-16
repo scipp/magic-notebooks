@@ -6,19 +6,24 @@ def find_peaks_in_np_array_nd(np_array_nd,
                               max_peak_number: int = 1000,
                               flag_variance: bool = True):
 
+    blurred = ndi.gaussian_filter(np_array_nd, sigma=20)
+    np_array_nd_diff = np_array_nd - blurred
+    np_array_nd_diff[np_array_nd_diff<0.] = 0.
     # --- 1) Adaptive thresholding ---
+    if threshold < 1e-5:
+        threshold = 1e-5
     peak_number = np.inf
     delimeter = abs(1 / threshold)
     if delimeter <= 1.:
         delimeter = 10.
     threshold = 1. / delimeter
 
-    arr_min = np_array_nd.min()
-    arr_max = np_array_nd.max()
+    arr_min = np_array_nd_diff.min()
+    arr_max = np_array_nd_diff.max()
     arr_range = arr_max - arr_min
 
     while peak_number > max_peak_number:
-        np_flag_peaks = np_array_nd > (threshold * arr_range + arr_min)
+        np_flag_peaks = np_array_nd_diff > (threshold * arr_range + arr_min)
         np_flag_peaks = ndi.binary_dilation(np_flag_peaks, iterations=2)
 
         peak_labels, peak_number = ndi.label(np_flag_peaks)

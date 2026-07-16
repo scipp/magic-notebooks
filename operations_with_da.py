@@ -8,11 +8,11 @@ from scipy.ndimage import (
     center_of_mass,
     binary_dilation,
     sum as ndi_sum,
+    gaussian_filter
 )
 import np_cryst_functions
 import peak_find_scipy
-import peak_find_skimage
-import peak_find_multiresolution
+import peak_find_skimage 
 
 def apply_detector_border(da, factor_border=0.07):
     if "detector_border" in da.masks.keys():
@@ -233,9 +233,8 @@ def find_peaks_hist(da_hist, threshold: float = 0.1, flag_variance:bool=True):
     # Threshold from 0. to 1.
     """Find peaks by events"""
     np_data = da_hist.values
-
-    # np_ind_xyz, np_var_xyz, np_intensity = peak_find_scipy.find_peaks_in_np_array_nd(np_data, threshold=threshold, max_peak_number=1000, flag_variance=flag_variance)
-    np_ind_xyz, np_var_xyz, np_intensity = peak_find_skimage.find_peaks_skimage(np_data, threshold=threshold, max_peak_number=1000, flag_variance=flag_variance)
+    np_ind_xyz, np_var_xyz, np_intensity = peak_find_scipy.find_peaks_in_np_array_nd(np_data, threshold=threshold, max_peak_number=1000, flag_variance=flag_variance)
+    # np_ind_xyz, np_var_xyz, np_intensity = peak_find_skimage.find_peaks_skimage(np_data, threshold=threshold, max_peak_number=1000, flag_variance=flag_variance)
     # np_ind_xyz, np_var_xyz, np_intensity = peak_find_multiresolution.find_peaks_multiresolution_3d(np_data, threshold_rel=threshold, max_peak_number_per_scale=1000, flag_variance=flag_variance)
     d_coords = {}
     for ind, s_ax in enumerate(da_hist.data.dims):
