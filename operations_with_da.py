@@ -229,11 +229,11 @@ def normalize_da_hist_by_vanadium(
     return da_hist_norm
 
 
-def find_peaks_hist(da_hist, threshold: float = 0.1, flag_variance:bool=True):
+def find_peaks_hist(da_hist, threshold: float = 0.1, flag_variance:bool=True, binary_dilation:int=2):
     # Threshold from 0. to 1.
     """Find peaks by events"""
     np_data = da_hist.values
-    np_ind_xyz, np_var_xyz, np_intensity = peak_find_scipy.find_peaks_in_np_array_nd(np_data, threshold=threshold, max_peak_number=1000, flag_variance=flag_variance)
+    np_ind_xyz, np_var_xyz, np_intensity = peak_find_scipy.find_peaks_in_np_array_nd(np_data, threshold=threshold, max_peak_number=1000, flag_variance=flag_variance, binary_dilation=binary_dilation)
     # np_ind_xyz, np_var_xyz, np_intensity = peak_find_skimage.find_peaks_skimage(np_data, threshold=threshold, max_peak_number=1000, flag_variance=flag_variance)
     # np_ind_xyz, np_var_xyz, np_intensity = peak_find_multiresolution.find_peaks_multiresolution_3d(np_data, threshold_rel=threshold, max_peak_number_per_scale=1000, flag_variance=flag_variance)
     d_coords = {}

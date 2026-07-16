@@ -4,11 +4,19 @@ import scipy.ndimage as ndi
 def find_peaks_in_np_array_nd(np_array_nd,
                               threshold: float = 0.1,
                               max_peak_number: int = 1000,
-                              flag_variance: bool = True):
+                              flag_variance: bool = True, binary_dilation:int=2):
 
-    blurred = ndi.gaussian_filter(np_array_nd, sigma=20)
-    np_array_nd_diff = np_array_nd - blurred
-    np_array_nd_diff[np_array_nd_diff<0.] = 0.
+    # blurred = ndi.gaussian_filter(np_array_nd, sigma=20)
+    # np_array_nd_diff = np_array_nd - blurred
+    # np_array_nd_diff[np_array_nd_diff<0.] = 0.
+
+    if len(np_array_nd.shape) >= 3:
+        np_array_nd_diff = ndi.gaussian_filter(np_array_nd, sigma=binary_dilation)
+    else: # This one is more precise but heavy 
+        background = ndi.percentile_filter(np_array_nd, percentile=10, size=41)
+        np_array_nd_diff = np_array_nd - background
+        np_array_nd_diff[np_array_nd_diff < 0] = 0
+
     # --- 1) Adaptive thresholding ---
     if threshold < 1e-5:
         threshold = 1e-5
@@ -24,7 +32,7 @@ def find_peaks_in_np_array_nd(np_array_nd,
 
     while peak_number > max_peak_number:
         np_flag_peaks = np_array_nd_diff > (threshold * arr_range + arr_min)
-        np_flag_peaks = ndi.binary_dilation(np_flag_peaks, iterations=2)
+        np_flag_peaks = ndi.binary_dilation(np_flag_peaks, iterations=binary_dilation)
 
         peak_labels, peak_number = ndi.label(np_flag_peaks)
 
