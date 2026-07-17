@@ -174,3 +174,155 @@ def calc_gamma_nu_by_tth_phi(tth, phi):
     nu = numpy.arcsin(numpy.sin(tth), numpy.sin(phi))
     return gamma, nu
 
+
+# get ub functions
+def get_ub(q_hkl):
+    np_q2 = calc_sum_q1_q2(q_hkl, -1*q_hkl)
+    # np_q2 = numpy.concatenate((q_hkl, np_q2), axis=1)
+    # np_r = calc_sum_q1_q2(np_q2, -1*np_q2)
+    # np_r = numpy.concatenate((np_q2, np_r), axis=1)
+    np_r = np_q2
+    flag, q1, q2, q3 = choose_min_q123(np_r)
+
+    if not flag:
+        if q1 is None:
+            print("\nNon of a,b,c was found.")
+            print("It looks that you do not provide the list of measured peaks.")
+        elif q2 is None:
+            print("\nOnly one vector in reciprocal space was found.")
+            print("Provide more peaks.")
+            print("\nVector 1:")
+            print(f"{q1[0]:9.5f} {q1[1]:9.5f} {q1[2]:9.5f}")
+            mod_q1 = numpy.sqrt(numpy.square(q1).sum())
+            print(f"\nModulus is {mod_q1:9.5f} inv.Ang")
+            print(f"\nDistance is {1/mod_q1:9.5f} Ang")
+        elif q3 is None:
+            print("\nOnly one vector in reciprocal space was found.")
+            print("Provide more peaks.")
+            print("\nVector 1:")
+            print(f"{q1[0]:9.5f} {q1[1]:9.5f} {q1[2]:9.5f}")
+            mod_q1 = numpy.sqrt(numpy.square(q1).sum())
+            print(f"\nModulus is {mod_q1:9.5f} inv.Ang")
+            print("\n\nVector 2:")
+            print(f"{q2[0]:9.5f} {q2[1]:9.5f} {q2[2]:9.5f}")
+            mod_q2 = numpy.sqrt(numpy.square(q2).sum())
+            print(f"\nModulus is {mod_q2:9.5f} inv.Ang")
+            q_cross = numpy.cross(q1, q2)
+            mod_q_cross = numpy.sqrt(numpy.square(q_cross).sum())
+            a = mod_q2/mod_q_cross
+            b = mod_q1/mod_q_cross
+            ang = 180. - numpy.degrees(numpy.asin(mod_q_cross/(mod_q1 * mod_q2)))
+            print(f"a is {a:9.5f} Ang \nb is {b:9.5f} Ang\nAngle is {ang:9.2f} deg.")
+        return None, None
+    print("\nUB-matrix:")
+    ub = numpy.array([
+     [q1[0], q2[0], q3[0]],
+     [q1[1], q2[1], q3[1]],
+     [q1[2], q2[2], q3[2]],
+    ], dtype=float)/(2*numpy.pi)
+    print(f"{ub[0,0]:9.5f} {ub[0,1]:9.5f} {ub[0,2]:9.5f}")
+    print(f"{ub[1,0]:9.5f} {ub[1,1]:9.5f} {ub[1,2]:9.5f}")
+    print(f"{ub[2,0]:9.5f} {ub[2,1]:9.5f} {ub[2,2]:9.5f}")
+
+    ucp = calc_unit_cell_parameters_by_b_matrix(ub)
+    print(f"Unit cell parameters: {ucp[0]:9.5f} {ucp[1]:9.5f} {ucp[2]:9.5f} {numpy.degrees(ucp[3]):9.5f} {numpy.degrees(ucp[4]):9.5f} {numpy.degrees(ucp[5]):9.5f}")
+    return ub, ucp
+    
+def calc_sum_q1_q2(np_q1, np_q2, mod_min_allowed = 0.03, mod_max_allowed = 5.):
+    l_res = []
+    n_q1 = np_q1.shape[1]
+    n_q2 = np_q2.shape[1]
+    for i1 in range(n_q1):
+        for i2 in range(n_q2):
+            val = np_q1[:, i1] + np_q2[:, i2]
+            l_res.append(val)
+    np_tot = numpy.stack(l_res, axis=1)
+
+
+    np_tot_norm = numpy.sqrt(numpy.square(np_tot).sum(axis=0))
+    np_flag = numpy.logical_and(
+        np_tot_norm >= mod_min_allowed,
+        np_tot_norm <= mod_max_allowed
+        )
+    np_tot = np_tot[:, np_flag]
+
+    # np_tot = numpy.unique(np_tot, axis=0)
+    # print("-------")
+    # for val in np_tot.transpose():
+    #     print(numpy.round(val, 2))
+    return np_tot
+
+
+def choose_min_q123(np_q, mod_min_allowed = 0.03, ang_min = numpy.radians(55)):
+    np_q_norm = numpy.sqrt(numpy.square(np_q).sum(axis=0))
+    np_ind_order = numpy.argsort(np_q_norm)
+    # for val in np_q.transpose():
+    #     print(numpy.round(val, 2))
+
+    # choosing q1:
+    flag_q1 = False
+    for ind_1, ind in enumerate(np_ind_order):
+        q1 = np_q[:, ind]
+        mod_q1 = np_q_norm[ind]
+        if mod_q1 >= mod_min_allowed:
+            flag_q1 = True
+            q1_norm = q1 / numpy.expand_dims(mod_q1, axis=0)
+            break
+    if not flag_q1: 
+        return False, None, None, None
+    # print("1: ", q1, mod_q1)
+
+    # choosing q2:
+    flag_q2 = False
+    for ind_2, ind in enumerate(np_ind_order[ind_1+1:]):
+        q2 = np_q[:, ind]
+        mod_q2 = np_q_norm[ind]
+        if mod_q2 < mod_min_allowed:
+            continue
+        q2_norm = q2 / numpy.expand_dims(mod_q2, axis=0)
+        if numpy.abs((q1_norm * q2_norm).sum()) > numpy.cos(ang_min):
+            continue
+        q_cross = numpy.cross(q1_norm, q2_norm)
+        mod_q_cross = numpy.sqrt(numpy.square(q_cross).sum(axis=0))
+        if mod_q_cross > numpy.sin(ang_min):
+            q_cross = q_cross / numpy.expand_dims(mod_q_cross, axis=0)
+            flag_q2 = True
+            break
+    if not flag_q2:
+        return False, q1, None, None
+    # print("2: ", q2, mod_q2)
+    
+    # choosing q3:
+    flag_q3 = False
+    for ind_3, ind in enumerate(np_ind_order[ind_1+1+ind_2+1:]):
+        q3 = np_q[:, ind]
+        mod_q3 = np_q_norm[ind]
+        if mod_q3 < mod_min_allowed:
+            continue
+        q3_norm = q3 / numpy.expand_dims(mod_q3, axis=0)
+        if numpy.abs((q1_norm * q3_norm).sum()) > numpy.cos(ang_min):
+            continue
+        if numpy.abs((q2_norm * q3_norm).sum()) > numpy.cos(ang_min):
+            continue
+        if numpy.abs((q_cross * q3_norm).sum()) < numpy.cos(ang_min):
+            continue
+        if numpy.abs(numpy.sum(q_cross * q3_norm)) > mod_min_allowed:
+            flag_q3 = True
+            break
+    if not flag_q3:
+        return False, q1, q2, None
+    # print("3: ", q3, mod_q3, q_cross)
+    return True, q1, q2, q3
+
+def calc_unit_cell_parameters_by_b_matrix(np_b):
+    abc_inv = numpy.sqrt(numpy.square(np_b).sum(axis=0))
+    cos_abg_inv = (numpy.roll(np_b,shift=-1,axis=1)*numpy.roll(np_b,shift=-2,axis=1)).sum(axis=0)/(numpy.roll(abc_inv, shift=-1,axis=0)*numpy.roll(abc_inv, shift=-2,axis=0))
+    sin_abg_inv = numpy.sqrt(1.-numpy.square(cos_abg_inv))
+    phi_inv = numpy.sqrt(1.-numpy.square(cos_abg_inv).sum()+2.*cos_abg_inv.prod())
+    vol_inv = abc_inv.prod()*phi_inv
+    vol = 1./vol_inv
+    abc = numpy.roll(abc_inv, shift=-1,axis=0)*numpy.roll(abc_inv, shift=-2,axis=0)*sin_abg_inv/vol_inv
+    sin_abg = phi_inv/(numpy.roll(sin_abg_inv, shift=-1,axis=0)*numpy.roll(sin_abg_inv, shift=-2,axis=0))
+    abg=numpy.asin(sin_abg)
+    unit_cell_parameters = numpy.array([abc[0], abc[1], abc[2], abg[0], abg[1], abg[2]], dtype=float)
+    return unit_cell_parameters
