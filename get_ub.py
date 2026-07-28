@@ -4,11 +4,11 @@ import magic_graphs
 import magic_scipp
 import scipp as sc
 
-def get_euleur_opt(
+def get_euler_opt(
         cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma, 
         Q_vec_rot, sigma_Q_vec_rot,
         euler_alpha, euler_beta, euler_gamma, graph_hkl=magic_graphs.graph_hkl,
-        relfine_unit_cell=False,singony='triclinic'):
+        refine_unit_cell=False,singony='triclinic'):
     """
     Joint refinement of UB matrix and unknown hkl values.
 
@@ -79,7 +79,7 @@ def get_euleur_opt(
     cell_beta_deg = cell_beta.to(unit="deg", copy=False).value
     cell_gamma_deg = cell_gamma.to(unit="deg", copy=False).value
 
-    if not relfine_unit_cell:
+    if not refine_unit_cell:
         sc_b_matrix = graph_hkl['b_matrix'](cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma)
         x0 = [ea_rad,eb_rad,eg_rad]
     elif singony.startswith('c'):
@@ -95,15 +95,15 @@ def get_euleur_opt(
         
 
     def calc_chi_sq(x):
-        euleur_angles = x[:3]
-        if relfine_unit_cell:
+        euler_angles = x[:3]
+        if refine_unit_cell:
             sc_b_matrix = calc_b_matrix_by_x(x[3:])
         else:
             sc_b_matrix = graph_hkl['b_matrix'](cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma)
         sc_u = magic_graphs.graph_hkl_inv["u_matrix"](
-            sc.scalar(euleur_angles[0], unit="rad"),
-            sc.scalar(euleur_angles[1], unit="rad"),
-            sc.scalar(euleur_angles[2], unit="rad"),
+            sc.scalar(euler_angles[0], unit="rad"),
+            sc.scalar(euler_angles[1], unit="rad"),
+            sc.scalar(euler_angles[2], unit="rad"),
             )
         sc_UB = graph_hkl["ub_matrix"](u_matrix=sc_u, b_matrix=sc_b_matrix)
         sc_hkl_int = graph_hkl["hkl_vec"](ub_matrix=sc_UB, Q_vec_rot=Q_vec_rot)
@@ -117,7 +117,7 @@ def get_euleur_opt(
     res = scipy.optimize.minimize(calc_chi_sq, x0, method='BFGS')# Nelder-Mead
     # res = scipy.optimize.basinhopping(calc_chi_sq, x0)
     ea_opt = res.x[:3]
-    if relfine_unit_cell:
+    if refine_unit_cell:
         sc_b_matrix =calc_b_matrix_by_x(res.x[3:])
     else:
         ea_opt = res.x[:3]%(2.*numpy.pi)
