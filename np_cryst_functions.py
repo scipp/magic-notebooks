@@ -35,6 +35,7 @@ def calc_tth_phi_wavelength_for_hkl(h, k, l, UB, R):
     phi    = numpy.rad2deg(numpy.arctan2(kf_y, kf_x))  
     return tth, phi, wavelength
 
+
 def generate_peak_data(UB, R, hmax, kmax, lmax, lambda_min, lambda_max):
     """
     Generate synthetic diffraction peak data based on:
@@ -227,7 +228,8 @@ def get_ub(q_hkl):
     ucp = calc_unit_cell_parameters_by_b_matrix(ub)
     print(f"Unit cell parameters: {ucp[0]:9.5f} {ucp[1]:9.5f} {ucp[2]:9.5f} {numpy.degrees(ucp[3]):9.5f} {numpy.degrees(ucp[4]):9.5f} {numpy.degrees(ucp[5]):9.5f}")
     return ub, ucp
-    
+
+
 def calc_sum_q1_q2(np_q1, np_q2, mod_min_allowed = 0.03, mod_max_allowed = 5.):
     l_res = []
     n_q1 = np_q1.shape[1]

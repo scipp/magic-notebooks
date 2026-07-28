@@ -38,7 +38,7 @@ def get_euleur_opt(
 
     h90 = sc.scalar(90., unit="deg")
     h120 = sc.scalar(120., unit="deg")
-
+    singony = singony.lower()
     def calc_b_matrix_by_x(x_cell):
         if singony.startswith('c'):
             ha = sc.scalar(x_cell[0], unit="angstrom")
