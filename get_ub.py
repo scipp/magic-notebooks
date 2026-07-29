@@ -145,7 +145,7 @@ def get_euler_opt(
         return (sc.scalar(ea_opt[0], unit="rad"), sc.scalar(ea_opt[1], unit="rad"), sc.scalar(ea_opt[2], unit="rad")), sc_b_matrix, calc_chi_sq(x0)
 
     if basinhopping:
-        res = scipy.optimize.basinhopping(calc_chi_sq, x0)
+        res = scipy.optimize.basinhopping(calc_chi_sq, x0, T=10000,niter=100, interval=20, stepwise_factor=0.7, disp=True)
         x0 = res.x
         
     res = scipy.optimize.minimize(calc_chi_sq, x0, method='BFGS')# Nelder-Mead
