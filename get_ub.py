@@ -5,10 +5,12 @@ import magic_scipp
 import scipp as sc
 
 def get_euler_opt(
-        cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma, 
+        cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma,
         Q_vec_rot, sigma_Q_vec_rot,
         euler_alpha, euler_beta, euler_gamma, graph_hkl=magic_graphs.graph_hkl,
-        refine_unit_cell=False,singony='triclinic'):
+        refine_unit_cell=False, refine_orientation:bool=True, 
+        volume_constraint:bool=False, basinhopping:bool=False,
+        singony='triclinic'):
     """
     Joint refinement of UB matrix and unknown hkl values.
 
@@ -79,27 +81,43 @@ def get_euler_opt(
     cell_beta_deg = cell_beta.to(unit="deg", copy=False).value
     cell_gamma_deg = cell_gamma.to(unit="deg", copy=False).value
 
-    if not refine_unit_cell:
-        sc_b_matrix = graph_hkl['b_matrix'](cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma)
-        x0 = [ea_rad,eb_rad,eg_rad]
-    elif singony.startswith('c'):
-        x0 = [ea_rad,eb_rad,eg_rad, cell_a_ang,]
+    x0 = []
+    if refine_orientation:
+       x0.extend([ea_rad, eb_rad, eg_rad]) 
+    x_cell = []
+    if singony.startswith('c'):
+        x_cell = [cell_a_ang, ]
     elif singony.startswith('h') or singony.startswith('te'):
-        x0 = [ea_rad,eb_rad,eg_rad, cell_a_ang,cell_c_ang]
+        x_cell = [cell_a_ang, cell_c_ang, ]
     elif singony.startswith('o'):
-        x0 = [ea_rad,eb_rad,eg_rad, cell_a_ang,cell_b_ang, cell_c_ang]
+        x_cell = [cell_a_ang, cell_b_ang, cell_c_ang, ]
     elif singony.startswith('m'):
-        x0 = [ea_rad,eb_rad,eg_rad, cell_a_ang,cell_b_ang, cell_c_ang, cell_beta_deg]
+        x_cell = [cell_a_ang, cell_b_ang, cell_c_ang, cell_beta_deg, ]
     else:
-        x0 = [ea_rad,eb_rad,eg_rad, cell_a_ang, cell_b_ang, cell_c_ang, cell_alpha_deg, cell_beta_deg, cell_gamma_deg]
+        x_cell = [cell_a_ang, cell_b_ang, cell_c_ang, cell_alpha_deg, cell_beta_deg, cell_gamma_deg, ]
+
+    if refine_unit_cell:
+        x0.extend(x_cell)
         
+    sc_b_matrix = calc_b_matrix_by_x(x_cell)
+    sc_ucp = magic_graphs.graph_ub_inv[("cell_a", "cell_b", "cell_c", "cell_alpha", "cell_beta", "cell_gamma",)](sc_b_matrix)
+    cell_volume = graph_hkl['cell_volume'](cell_a=sc_ucp[0], cell_b=sc_ucp[1], cell_c=sc_ucp[2],
+                             cell_alpha=sc_ucp[3], cell_beta=sc_ucp[4], cell_gamma=sc_ucp[5])
+    cell_volume_max = 1.2 * cell_volume
 
     def calc_chi_sq(x):
-        euler_angles = x[:3]
+        i_cell = 0
+        if refine_orientation:
+            euler_angles = x[:3]
+            i_cell = 3
+        else:
+            euler_angles = numpy.array([ea_rad, eb_rad, eg_rad], dtype=float)
+            
         if refine_unit_cell:
-            sc_b_matrix = calc_b_matrix_by_x(x[3:])
+            sc_b_matrix = calc_b_matrix_by_x(x[i_cell:])
         else:
             sc_b_matrix = graph_hkl['b_matrix'](cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma)
+        
         sc_u = magic_graphs.graph_hkl_inv["u_matrix"](
             sc.scalar(euler_angles[0], unit="rad"),
             sc.scalar(euler_angles[1], unit="rad"),
@@ -107,20 +125,41 @@ def get_euler_opt(
             )
         sc_UB = graph_hkl["ub_matrix"](u_matrix=sc_u, b_matrix=sc_b_matrix)
         sc_hkl_int = graph_hkl["hkl_vec"](ub_matrix=sc_UB, Q_vec_rot=Q_vec_rot)
-        sc_hkl_int.values = numpy.round(sc_hkl_int.values,0) 
+        sc_hkl_int.values = numpy.round(sc_hkl_int.values, 0)
         Q_vec_rot_ref = magic_graphs.graph_hkl_inv["Q_vec_rot"](ub_matrix=sc_UB, hkl_vec=sc_hkl_int)
         Q_vec_rot_diff = (Q_vec_rot_ref - Q_vec_rot).values/sigma_Q_vec_rot.values
         chi_sq = (numpy.square(Q_vec_rot_diff)).sum() # * numpy.expand_dims(np_weight, axis=1)
+        if volume_constraint and refine_unit_cell:
+            sc_ucp = magic_graphs.graph_ub_inv[("cell_a", "cell_b", "cell_c", "cell_alpha", "cell_beta", "cell_gamma",)](sc_b_matrix)
+            cell_volume = graph_hkl['cell_volume'](cell_a=sc_ucp[0], cell_b=sc_ucp[1], cell_c=sc_ucp[2],
+                             cell_alpha=sc_ucp[3], cell_beta=sc_ucp[4], cell_gamma=sc_ucp[5])
+            if cell_volume > cell_volume_max:
+                chi_sq *= 7.*cell_volume.value/cell_volume_max.value
+            
         return chi_sq
 
+    if len(x0)==0:
+        print('No refined parameters')
+        ea_opt = numpy.array([ea_rad, eb_rad, eg_rad], dtype=float)
+        sc_b_matrix
+        return (sc.scalar(ea_opt[0], unit="rad"), sc.scalar(ea_opt[1], unit="rad"), sc.scalar(ea_opt[2], unit="rad")), sc_b_matrix, calc_chi_sq(x0)
 
+    if basinhopping:
+        res = scipy.optimize.basinhopping(calc_chi_sq, x0)
+        x0 = res.x
+        
     res = scipy.optimize.minimize(calc_chi_sq, x0, method='BFGS')# Nelder-Mead
-    # res = scipy.optimize.basinhopping(calc_chi_sq, x0)
-    ea_opt = res.x[:3]
-    if refine_unit_cell:
-        sc_b_matrix =calc_b_matrix_by_x(res.x[3:])
+    i_cell = 0
+    if refine_orientation:
+        i_cell = 3
+        ea_opt = numpy.array(res.x[:i_cell], dtype=float)
     else:
-        ea_opt = res.x[:3]%(2.*numpy.pi)
+        ea_opt = numpy.array([ea_rad, eb_rad, eg_rad], dtype=float)
+    
+    if refine_unit_cell:
+        sc_b_matrix =calc_b_matrix_by_x(res.x[i_cell:])
+    
+    ea_opt = ea_opt%(2.*numpy.pi)
     return (sc.scalar(ea_opt[0], unit="rad"), sc.scalar(ea_opt[1], unit="rad"), sc.scalar(ea_opt[2], unit="rad")), sc_b_matrix, res.fun
 
 
