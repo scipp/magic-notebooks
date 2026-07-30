@@ -10,7 +10,8 @@ def get_sc_rotation_matrix(r_matrix):
     quternion_r_matrix = scipy.spatial.transform.Rotation.from_matrix(r_matrix).as_quat()
     r_out = sc.spatial.rotation(value=quternion_r_matrix / numpy.linalg.norm(quternion_r_matrix))
     return r_out 
-    
+
+
 def calc_incident_beam_magic(source_position, tp_position, sample_position):
     tp = tp_position.to(unit='m', copy=False)
     v1 = sample_position.to(unit='m', copy=False) - tp
@@ -19,20 +20,25 @@ def calc_incident_beam_magic(source_position, tp_position, sample_position):
     incident_beam = v1 + e1 * sc.norm(v2)
     return incident_beam
 
-def calc_event_position_global(position, event_position_local, gamma):
 
-    zero_o = sc.sin(sc.zeros_like(gamma))
-    one_o = sc.cos(sc.zeros_like(gamma))
-    m_gamma = [
-        [sc.cos(gamma), zero_o, sc.sin(gamma)],
-        [zero_o, one_o, zero_o],
-        [-sc.sin(gamma), zero_o, sc.cos(gamma)],
-    ]
-    rotation_gamma = get_sc_rotation_matrix(m_gamma)
-    position_rotated = rotation_gamma * event_position_local.to(unit='m', copy=False)
-    event_position_global = position.to(unit='m', copy=False) + position_rotated
+def calc_event_position_global(position, event_position_local, gamma):
+    values = np_cryst_functions.rotate_vector_around_Y_axis(
+        event_position_local.to(unit='m').values.T,
+        gamma.to(unit='rad').value
+    ).T
+    event_position_global = position.to(unit='m', copy=False) +  sc.vectors(
+        dims=event_position_local.dims, values=values, unit='m')
     return event_position_global
 
+
+def calc_event_position_global_by_gamma_nu_r(position, event_gamma, event_nu, event_r):
+    values = np_cryst_functions.calc_vector_by_gamma_nu_r(
+        event_gamma.to(unit='rad').values,
+        event_nu.to(unit='rad').values,
+        event_r.to(unit='m').values).T
+    event_position_global = position.to(unit='m', copy=False) + sc.vectors(
+        dims=event_gamma.dims, values = values, unit='m')
+    return event_position_global
 
 def calc_tof(toa, delta_t=sc.scalar(value=3, unit="ms")):
     tof = toa.to(unit='s', copy=False) - delta_t.to(unit='s', copy=False)

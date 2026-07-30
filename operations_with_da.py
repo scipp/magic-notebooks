@@ -14,6 +14,33 @@ import np_cryst_functions
 import peak_find_scipy
 import peak_find_skimage 
 
+def get_da_reduced(detector, bin_toa, count_min=0):    
+    detector_hist = detector.hist(toa=bin_toa)
+    detector_hist.coords['toa'] = sc.midpoints(detector_hist.coords['toa'])
+    detector_event = sc.flatten(detector_hist, to=detector.data[0].values.dims[0])
+    return detector_event[(detector_event>count_min).data]
+
+
+def get_bin_by_step(dim: str, start: float, stop: float, step: float, unit):
+    """Give binning with predefined step from start to stop point with given step.
+    Stop point can be slightly shifted if number of steps is not integer. 
+    """
+    num = int(numpy.round((stop-start)/step, 0))+1
+    end = start + (num-1)*step
+    return sc.linspace(
+        dim=dim, start=start, stop=end, num=num, unit=unit, endpoint=True
+    )
+
+
+def move_data_from_dg_magic_to_da_reduced(dg_magic, da_reduced):
+    assign_dg_to_da_coords(dg_magic['sample'], da_reduced, prefix="sample")
+    da_reduced.coords['tp_position'] = dg_magic['tp_position']
+    da_reduced.coords['source_position'] = dg_magic['source_position']
+    da_reduced.coords['delta_L'] = dg_magic['delta_L']
+    da_reduced.coords['delta_t'] = dg_magic['delta_t']
+    return
+
+
 def apply_detector_border(da, factor_border=0.07):
     if "detector_border" in da.masks.keys():
         da.masks["detector_border"] |= (

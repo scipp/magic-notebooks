@@ -1,5 +1,32 @@
 import numpy
 
+
+def calc_vector_by_gamma_nu_r(gamma, nu, r):
+    """
+    Compute a 3D vector of length r using two angles:
+    - gamma: rotation around the Y axis (azimuth), in radians
+    - nu: angle between the vector and its projection on the XZ plane (elevation-like), in radians
+   """
+    sn, cn = numpy.sin(nu), numpy.cos(nu)
+    sg, cg = numpy.sin(gamma), numpy.cos(gamma)
+    return numpy.array([r * cn * sg,
+                        r * sn,
+                        r * cn * cg], dtype=float)
+
+
+def rotate_vector_around_Y_axis(vector, angle):
+    """
+    Comput rotation of vector along Y axis (direction from Z axis to X axis)
+    Angle is given in radians.
+    """
+    sa, ca = numpy.sin(angle), numpy.cos(angle)
+    vx, vy, vz = vector[0], vector[1], vector[2]
+    return numpy.array([vx*ca+vz*sa,
+                        vy,
+                        -vx*sa+vz*ca], dtype=float)
+
+
+
 def calc_gamma_nu_wavelength_for_hkl(h, k, l, UB, R):
     hkl = numpy.vstack([h, k, l]).T
     Q = (R @ (UB @ hkl.T)).T
