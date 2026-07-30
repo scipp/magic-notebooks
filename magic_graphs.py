@@ -236,21 +236,25 @@ def calc_event_position_local_by_pixel_id(voxel_ID_VS, voxel_ID_a, voxel_ID_c, N
                     )
     return event_position_local
 
-def calc_gamma_nu_event(event_position_local, gamma):
+def calc_gamma_nu_r_event(event_position_local, gamma):
     np_xyz = event_position_local.values.transpose()
     np_norm = numpy.linalg.norm(np_xyz,axis=0)
     np_gamma = numpy.atan2(np_xyz[0], np_xyz[2]) + gamma.to(unit="rad").value
     np_nu = numpy.asin(np_xyz[1]/np_norm)
     event_gamma = sc.array(
-        dims=event_position_local.dims, 
-        values=np_gamma, 
+        dims=event_position_local.dims,
+        values=np_gamma,
         unit='rad')
 
     event_nu = sc.array(
-        dims=event_position_local.dims, 
-        values=np_nu, 
+        dims=event_position_local.dims,
+        values=np_nu,
         unit='rad')
-    return {"event_gamma":event_gamma, "event_nu":event_nu, }
+    event_r = sc.array(
+        dims=event_position_local.dims,
+        values=np_norm,
+        unit=event_position_local.unit)
+    return {"event_gamma":event_gamma, "event_nu":event_nu, "event_r": event_r}
 
 
 def calc_tth_phi_event(event_gamma, event_nu):
@@ -276,7 +280,7 @@ def calc_scattered_beam(sample_position, event_position_global):
 graph_detector = {
     "event_position_global": calc_event_position_global,
     ("voxel_ID_VS", "voxel_ID_a", "voxel_ID_c"):calc_voxel_id_vsac,
-    ("event_gamma", "event_nu"): calc_gamma_nu_event,
+    ("event_gamma", "event_nu", "event_r"): calc_gamma_nu_r_event,
     ("event_two_theta", "event_phi"): calc_tth_phi_event,
     "event_position_local": calc_event_position_local_by_pixel_id,
     
