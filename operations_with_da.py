@@ -80,32 +80,6 @@ def da_to_laue_hist(da, factor_border: float = 0.07):
     return data_laue
 
 
-# def da_to_2d_hist(da, factor_border: float = 0.07):
-#     da = da.transform_coords(
-#         ("event_gamma", "event_nu", "voxel_ID_a"),
-#         graph=magic_graphs.graph_detector,
-#         rename_dims=False,
-#     )
-#     delta_gamma_event = sc.scalar(0.15, unit="deg").to(unit="rad")
-#     gamma_min = da.coords["event_gamma"].min()
-#     gamma_max = da.coords["event_gamma"].max()
-#     num_gamma = int(((gamma_max - gamma_min) / delta_gamma_event).value)
-#     bin_gamma = sc.linspace("event_gamma", gamma_min, gamma_max, num=num_gamma)
-
-#     delta_nu_event = sc.scalar(0.333, unit="deg").to(unit="rad")
-#     nu_min = da.coords["event_nu"].min()
-#     nu_max = da.coords["event_nu"].max()
-#     num_nu = int(((nu_max - nu_min) / delta_nu_event).value)
-#     bin_nu = sc.linspace("event_nu", nu_min, nu_max, num=num_nu)
-
-#     delta_toa = sc.scalar(0.1e-3, unit="s")
-#     toa_min = da.coords["toa"].min()
-#     toa_max = da.coords["toa"].max()
-#     num_toa = int(((toa_max - toa_min) / delta_toa).value)
-#     bin_toa = sc.linspace("toa", toa_min, toa_max, num=num_toa)
-#     data_hist = da.hist(toa=bin_toa, event_nu=bin_nu, event_gamma=bin_gamma)
-#     return data_hist
-
 
 def normalize_da_event_by_cave_monitor(da_q_event, da_cm, factor=0.1):
     da_cm = da_cm.transform_coords(

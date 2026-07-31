@@ -1,6 +1,102 @@
 import numpy
 
+def calc_wavelength(l_m, tof_ms):
+    wavelength = 3.9556 * tof_ms / l_m
+    return wavelength
 
+def calc_l_total(l_incident_beam, l_scattered_beam, delta_l:float=0.):
+    l_total = l_incident_beam + l_scattered_beam - delta_l
+    return l_total
+
+def calc_tof(toa_ms, delta_t_ms:float=0.):
+    tof_ms = toa_ms-delta_t_ms
+    return tof_ms
+
+def calc_sample_position(ideal_sample_position, sample_offset):
+    sample_position = ideal_sample_position + sample_offset 
+    return sample_position
+
+def calc_incident_beam(source_position, tp_position, sample_position):
+    v1 = sample_position - tp_position
+    v2 = tp_position - source_position 
+    e1 = v1/numpy.linalg.norm(v1, axis=0)
+    incident_beam = v1 + e1 * numpy.linalg.norm(v2, axis=0)
+    return incident_beam
+
+def calc_scattered_beam(sample_position, event_position_global):
+    scattered_beam = event_position_global - numpy.expand_dims(sample_position, axis=1)
+    return scattered_beam
+
+def calc_l_incident_beam(incident_beam):
+    l_incident_beam = numpy.linalg.norm(incident_beam, axis=0)
+    return l_incident_beam
+
+
+def calc_l_scattered_beam(scattered_beam):
+    l_scattered_beam = numpy.linalg.norm(scattered_beam, axis=0)
+    return l_scattered_beam
+
+def calc_ki(incident_beam, wavelength):
+    e1 = numpy.expand_dims(incident_beam/numpy.linalg.norm(incident_beam, axis=0), axis=1)
+    ki = 2.*numpy.pi*e1/numpy.expand_dims(wavelength, axis=0)
+    return ki
+
+def calc_kf(scattered_beam, wavelength):
+    e1 = scattered_beam/numpy.linalg.norm(scattered_beam, axis=0)
+    kf = 2.*numpy.pi*e1/numpy.expand_dims(wavelength, axis=0)
+    return kf
+
+def calc_q(ki, kf):
+    q = kf-ki
+    return q
+
+def calc_sample_rotation(sample_omega, sample_chi, sample_phi):
+    omega,chi,phi = sample_omega, sample_chi, sample_phi
+    zero_o = numpy.sin(numpy.zeros_like(omega))
+    one_o = numpy.cos(numpy.zeros_like(omega))
+    m_omega = numpy.array([
+        [numpy.cos(omega), zero_o, numpy.sin(omega)],
+        [zero_o, one_o, zero_o],
+        [-numpy.sin(omega), zero_o, numpy.cos(omega)],
+    ], dtype=float)
+    zero_c = numpy.sin(numpy.zeros_like(chi))
+    one_c = numpy.cos(numpy.zeros_like(chi))
+    m_chi = numpy.array([
+        [numpy.cos(chi), -numpy.sin(chi), zero_c],
+        [numpy.sin(chi), numpy.cos(chi), zero_c],
+        [zero_c, zero_c, one_c],
+    ], dtype=float)
+
+    zero_p = numpy.sin(numpy.zeros_like(phi))
+    one_p = numpy.cos(numpy.zeros_like(phi))
+    m_phi = numpy.array([
+        [numpy.cos(phi), zero_p, numpy.sin(phi)],
+        [zero_p, one_p, zero_p],
+        [-numpy.sin(phi), zero_p, numpy.cos(phi)],
+    ], dtype=float)
+    sample_rotation = m_omega @ m_chi @ m_phi
+    return sample_rotation
+
+def calc_q_unrot(sample_rotation, q):
+    q_unrot = numpy.linalg.inv(sample_rotation) @ q
+    return q_unrot
+
+
+np_graph_qvec = {
+    'wavelength': calc_wavelength,
+    'l_total': calc_l_total,
+    'tof_ms': calc_tof,
+    'sample_position': calc_sample_position,
+    'incident_beam': calc_incident_beam,
+    'scattered_beam': calc_scattered_beam,
+    'l_incident_beam': calc_l_incident_beam,
+    'l_scattered_beam': calc_l_scattered_beam,
+    'ki': calc_ki,
+    'kf': calc_kf,
+    'q': calc_q,
+    'sample_rotation': calc_sample_rotation,
+    'q_unrot': calc_q_unrot,
+}
 def calc_vector_by_gamma_nu_r(gamma, nu, r):
     """
     Compute a 3D vector of length r using two angles:
@@ -133,32 +229,6 @@ def calc_orientation_matrix(euler_alpha, euler_beta, euler_gamma, ):
     return m_m
 
 
-
-def calc_sample_rotation(sample_omega, sample_chi, sample_phi):
-    zero_o = numpy.sin(numpy.zeros_like(sample_omega))
-    one_o = numpy.cos(numpy.zeros_like(sample_omega))
-    m_omega = numpy.array([
-        [numpy.cos(sample_omega), zero_o, numpy.sin(sample_omega)],
-        [zero_o, one_o, zero_o],
-        [-numpy.sin(sample_omega), zero_o, numpy.cos(sample_omega)],
-    ],dtype=float)
-    zero_c = numpy.sin(numpy.zeros_like(sample_chi))
-    one_c = numpy.cos(numpy.zeros_like(sample_chi))
-    m_chi = numpy.array([
-        [numpy.cos(sample_chi), -numpy.sin(sample_chi), zero_c],
-        [numpy.sin(sample_chi), numpy.cos(sample_chi), zero_c],
-        [zero_c, zero_c, one_c],
-    ],dtype=float)
-
-    zero_p = numpy.sin(numpy.zeros_like(sample_phi))
-    one_p = numpy.cos(numpy.zeros_like(sample_phi))
-    m_phi = numpy.array([
-        [numpy.cos(sample_phi), zero_p, numpy.sin(sample_phi)],
-        [zero_p, one_p, zero_p],
-        [-numpy.sin(sample_phi), zero_p, numpy.cos(sample_phi)],
-    ], dtype=float)
-    sample_rotation = m_omega @ m_chi @ m_phi
-    return sample_rotation
 
 
 def calc_cell_phi(cell_alpha, cell_beta, cell_gamma):

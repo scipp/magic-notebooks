@@ -1,3 +1,4 @@
+"""
 import numpy
 import scipy.optimize
 import magic_graphs
@@ -11,25 +12,7 @@ def get_euler_opt(
         refine_unit_cell=False, refine_orientation:bool=True, 
         volume_constraint:bool=False, basinhopping:bool=False,
         singony='triclinic'):
-    """
-    Joint refinement of UB matrix and unknown hkl values.
 
-    Parameters
-    ----------
-    B : (3,3) array
-        Reciprocal lattice matrix.
-    q_list : (N,3) array
-        Measured Q vectors.
-    hkl_init : (N,3) array or None
-        Initial guess for hkl. If None, use fractional guess from B^-1 Q.
-
-    Returns
-    -------
-    UB : (3,3) array
-        Refined UB matrix.
-    hkl : (N,3) array
-        Refined fractional hkl values.
-    """
     # np_weight = numpy.asarray(weight) # values
     # np_weight = np_weight / numpy.max(np_weight)
 
@@ -214,3 +197,161 @@ def optimize_delta_t_delta_l(da):
     da.coords["euler_gamma"] = sc.scalar(res.x[5], unit="rad")
     magic_scipp.remove_coords_in_da(da, "h", "k", "l", "h_reduced", "k_reduced", "l_reduced", "hkl_vec","Q_vec_rot","Q_vec","Qx","Qy","Qz","wavelength", "tof", "Ltotal", "Q", "u_matrix", "b_matrix", "ub_matrix")
     return
+
+"""
+
+import numpy
+import scipy.optimize
+import np_cryst_functions
+
+def get_euler_opt(
+    unit_cell_parameters: numpy.ndarray,
+    q_vec: numpy.ndarray, 
+    sigma_q_vec: numpy.ndarray,
+    euler_angles: numpy.ndarray,
+    singony: str = 'triclinic',
+    refine_unit_cell_parameters: bool = False, 
+    refine_euler_angles: bool = True,
+    constraint_volume: bool = False, 
+    minimization_basinhopping: bool = False,
+):
+    """
+    Joint refinement of UB matrix and unknown hkl values
+
+    Parameters
+    ----------
+    unit_cell_parameters: [cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma] in angstrem and radians
+
+    q_vec: (3, N)  Measured Q vectors in lab frame.
+    sigma_Q_vec_rot : (N,3) ndarray
+        Uncertainties for Q_vec_rot.
+    euler_alpha, euler_beta, euler_gamma : float
+        Initial Euler angles in radians.
+    singony : str
+        Crystal system: 'cubic', 'hexagonal', 'tetragonal', 'orthorhombic',
+        'monoclinic', or 'triclinic'.
+    refine_unit_cell_parameters : bool
+        If True, refine unit cell parameters.
+    refine_euler_angles : bool
+        If True, refine Euler angles.
+    constraint_volume : bool
+        If True, penalize unit cells with volume above initial max.
+    minimization_basinhopping : bool
+        If True, run basinhopping before local minimization.
+
+    Returns
+    -------
+    unit_cell_parameters_opt: (6,) ndarray
+        Refined unit cell parameters
+    euler_opt : (3,) ndarray
+        Refined Euler angles in radians.
+    b_matrix : (3,3) ndarray
+        Refined reciprocal lattice matrix.
+    chi_sq_min : float
+        Final chi-square value.
+    """
+
+    singony = singony.lower()
+    # Initial cell parameter vector
+    if singony.startswith('c'):
+        l_ind = [0, ]
+    elif singony.startswith('h') or singony.startswith('te'):
+        l_ind = [0, 2, ]
+    elif singony.startswith('o'):
+        l_ind = [0, 1, 2, ]
+    elif singony.startswith('m'):
+        l_ind = [0, 1, 2, 4, ]
+    else:
+        l_ind = [0, 1, 2, 3, 4, 5,]
+    x_cell = [unit_cell_parameters[ind] for ind in l_ind]
+
+    rad90 = numpy.pi * 0.5
+    rad120 = numpy.pi * 2. / 3.
+
+    def calc_b_matrix_by_x(x_cell):
+        if singony.startswith('c'):
+            a = x_cell[0]
+            b_matrix = np_cryst_functions.calc_b_matrix(a, a, a, rad90, rad90, rad90)
+        elif singony.startswith('h'):
+            a, c = x_cell
+            b_matrix = np_cryst_functions.calc_b_matrix(a, a, c, rad90, rad90, rad120)
+        elif singony.startswith('te'):
+            a, c = x_cell
+            b_matrix = np_cryst_functions.calc_b_matrix(a, a, c, rad90, rad90, rad90)
+        elif singony.startswith('o'):
+            a, b, c = x_cell[0],x_cell[1],x_cell[2]
+            b_matrix = np_cryst_functions.calc_b_matrix(a, b, c, rad90, rad90, rad90)
+        elif singony.startswith('m'):
+            a, b, c, beta = x_cell
+            b_matrix = np_cryst_functions.calc_b_matrix(a, b, c, rad90, beta, rad90)
+        else:
+            a, b, c, alpha, beta, gamma = x_cell
+            b_matrix = np_cryst_functions.calc_b_matrix(a, b, c, alpha, beta, gamma)
+        return b_matrix
+
+    x0 = []
+    if refine_euler_angles:
+        x0.extend(list(euler_angles))
+    if refine_unit_cell_parameters:
+        x0.extend(x_cell)
+
+    # Initial B matrix and volume
+    b_matrix_init = calc_b_matrix_by_x(x_cell)
+
+    ucp_init = np_cryst_functions.calc_unit_cell_parameters_by_b_matrix(b_matrix_init)
+    cell_volume_init = np_cryst_functions.calc_cell_volume(*ucp_init)
+
+    cell_volume_max = 1.5 * cell_volume_init
+
+    def calc_chi_sq(x):
+        if refine_euler_angles:
+            ea = numpy.array(x[:3], dtype=float)
+            i_cell = 3
+        else:
+            ea = euler_angles
+            i_cell = 0
+        if refine_unit_cell_parameters:
+            b_matrix = calc_b_matrix_by_x(x[i_cell:])
+        else:
+            b_matrix = np_cryst_functions.calc_b_matrix(*ucp_init)
+        u_matrix = np_cryst_functions.calc_orientation_matrix(*ea)
+        ub_matrix = u_matrix @ b_matrix
+        hkl_int = numpy.linalg.inv(ub_matrix) @ q_vec
+        hkl_int = numpy.round(hkl_int, 0)
+        q_vec_ref = ub_matrix @ hkl_int
+        q_vec_diff = (q_vec_ref - q_vec) / sigma_q_vec
+        chi_sq = numpy.square(q_vec_diff).sum()
+        if constraint_volume and refine_unit_cell_parameters:
+            ucp = np_cryst_functions.calc_unit_cell_parameters_by_b_matrix(b_matrix)
+            cell_volume = np_cryst_functions.calc_cell_volume(*ucp)
+            if cell_volume > cell_volume_max:
+                chi_sq *= 7.0 * (cell_volume / cell_volume_max)
+        return chi_sq
+
+    if len(x0) == 0:
+        ub_matrix_init = np_cryst_functions.calc_orientation_matrix(*euler_angles) @ b_matrix_init
+        return ucp_init, euler_angles, ub_matrix_init, {'fun': calc_chi_sq([]), 'message': 'No refined parameters'}
+
+    if minimization_basinhopping:
+        res_bh = scipy.optimize.basinhopping(
+            calc_chi_sq, x0, T=10000, niter=100,
+            interval=20, stepwise_factor=0.7, disp=True
+        )
+        x0 = res_bh.x
+    res = scipy.optimize.minimize(calc_chi_sq, x0, method='BFGS')
+
+    if refine_euler_angles:
+        ea_opt = numpy.array(res.x[:3], dtype=float)
+        i_cell = 3
+    else:
+        ea_opt = euler_angles
+        i_cell = 0
+
+    if refine_unit_cell_parameters:
+        b_matrix_final = calc_b_matrix_by_x(res.x[i_cell:])
+    else:
+        b_matrix_final = b_matrix_init
+    ucp_final = np_cryst_functions.calc_unit_cell_parameters_by_b_matrix(b_matrix_final)
+    ea_opt = ea_opt % (2.0 * numpy.pi)
+    ub_matrix_final = np_cryst_functions.calc_orientation_matrix(*ea_opt) @ b_matrix_final
+    return ucp_final, ea_opt, ub_matrix_final, res
