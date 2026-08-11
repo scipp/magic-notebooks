@@ -1,11 +1,12 @@
 import inspect
 import networkx as nx
 import matplotlib.pyplot as plt
+import copy
 
 class ParameterResolver:
     def __init__(self, functions, params, aliases=None):
         self.functions = functions
-        self.params = params
+        self.params = copy.deepcopy(params)
         self.aliases = aliases or {}
         self._stack = set()
         self.last_inputs = {}  # for partial recomputation
@@ -46,14 +47,6 @@ class ParameterResolver:
 
         if verbose:
             print(f"Computing {name} using {func.__name__}")
-
-        # sig = inspect.signature(func)
-        # input_names = list(sig.parameters.keys())
-
-        # inputs = {
-        #     p: self._resolve_one(self.canonical(p), force_recompute, verbose)
-        #     for p in input_names
-        # }
 
         sig = inspect.signature(func)
         inputs = {}
