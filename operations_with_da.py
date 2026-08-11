@@ -88,7 +88,9 @@ def normalize_da_event_by_cave_monitor(da_q_event, da_cm, factor=0.1):
         rename_dims=False,
     )
     da_q_event = da_q_event.transform_coords(
-        ("wavelength",), graph=magic_graphs.graph_qvec, rename_dims=False
+        ("wavelength",), 
+        graph={**magic_graphs.graph_detector, **magic_graphs.graph_qvec,},
+        rename_dims=False
     )
 
     da_cm.masks["counts"] = sc.logical_not(
