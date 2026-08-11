@@ -47,7 +47,7 @@ def calc_kf(scattered_beam, wavelength):
     return kf
 
 def calc_q(ki, kf):
-    q = kf-ki
+    q = ki-kf # The definition as in scipp
     return q
 
 def calc_sample_rotation(sample_omega, sample_chi, sample_phi):

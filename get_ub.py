@@ -301,7 +301,7 @@ def get_euler_opt(
     ucp_init = np_cryst_functions.calc_unit_cell_parameters_by_b_matrix(b_matrix_init)
     cell_volume_init = np_cryst_functions.calc_cell_volume(*ucp_init)
 
-    cell_volume_max = 1.5 * cell_volume_init
+    cell_volume_max = 1.2 * cell_volume_init
 
     def calc_chi_sq(x):
         if refine_euler_angles:
