@@ -204,7 +204,7 @@ import numpy
 import scipy.optimize
 import np_cryst_functions
 
-def get_euler_opt(
+def get_euler_opt_by_qvec(
     unit_cell_parameters: numpy.ndarray,
     q_vec: numpy.ndarray, 
     sigma_q_vec: numpy.ndarray,
