@@ -1,20 +1,25 @@
 import numpy
 
+
 def calc_wavelength(l_m, tof_ms):
     wavelength = 3.9556 * tof_ms / l_m
     return wavelength
+
 
 def calc_l_total(l_incident_beam, l_scattered_beam, delta_l:float=0.):
     l_total = l_incident_beam + l_scattered_beam - delta_l
     return l_total
 
+
 def calc_tof(toa_ms, delta_t_ms:float=0.):
     tof_ms = toa_ms-delta_t_ms
     return tof_ms
 
+
 def calc_sample_position(ideal_sample_position, sample_offset):
     sample_position = ideal_sample_position + sample_offset 
     return sample_position
+
 
 def calc_incident_beam(source_position, tp_position, sample_position):
     v1 = sample_position - tp_position
@@ -23,9 +28,11 @@ def calc_incident_beam(source_position, tp_position, sample_position):
     incident_beam = v1 + e1 * numpy.linalg.norm(v2, axis=0)
     return incident_beam
 
+
 def calc_scattered_beam(sample_position, event_position_global):
     scattered_beam = event_position_global - numpy.expand_dims(sample_position, axis=1)
     return scattered_beam
+
 
 def calc_l_incident_beam(incident_beam):
     l_incident_beam = numpy.linalg.norm(incident_beam, axis=0)
@@ -36,19 +43,23 @@ def calc_l_scattered_beam(scattered_beam):
     l_scattered_beam = numpy.linalg.norm(scattered_beam, axis=0)
     return l_scattered_beam
 
+
 def calc_ki(incident_beam, wavelength):
     e1 = numpy.expand_dims(incident_beam/numpy.linalg.norm(incident_beam, axis=0), axis=1)
     ki = 2.*numpy.pi*e1/numpy.expand_dims(wavelength, axis=0)
     return ki
+
 
 def calc_kf(scattered_beam, wavelength):
     e1 = scattered_beam/numpy.linalg.norm(scattered_beam, axis=0)
     kf = 2.*numpy.pi*e1/numpy.expand_dims(wavelength, axis=0)
     return kf
 
+
 def calc_q(ki, kf):
     q = ki-kf # The definition as in scipp
     return q
+
 
 def calc_sample_rotation(sample_omega, sample_chi, sample_phi):
     omega,chi,phi = sample_omega, sample_chi, sample_phi
@@ -77,10 +88,10 @@ def calc_sample_rotation(sample_omega, sample_chi, sample_phi):
     sample_rotation = m_omega @ m_chi @ m_phi
     return sample_rotation
 
+
 def calc_q_unrot(sample_rotation, q):
     q_unrot = numpy.linalg.inv(sample_rotation) @ q
     return q_unrot
-
 
 np_graph_qvec = {
     'wavelength': calc_wavelength,
@@ -97,6 +108,8 @@ np_graph_qvec = {
     'sample_rotation': calc_sample_rotation,
     'q_unrot': calc_q_unrot,
 }
+
+
 def calc_vector_by_gamma_nu_r(gamma, nu, r):
     """
     Compute a 3D vector of length r using two angles:
@@ -120,7 +133,6 @@ def rotate_vector_around_Y_axis(vector, angle):
     return numpy.array([vx*ca+vz*sa,
                         vy,
                         -vx*sa+vz*ca], dtype=float)
-
 
 
 def calc_gamma_nu_wavelength_for_hkl(h, k, l, UB, R):
@@ -229,8 +241,6 @@ def calc_orientation_matrix(euler_alpha, euler_beta, euler_gamma, ):
     return m_m
 
 
-
-
 def calc_cell_phi(cell_alpha, cell_beta, cell_gamma):
     ca, cb, cg = numpy.cos(cell_alpha), numpy.cos(cell_beta), numpy.cos(cell_gamma)
     cell_phi = numpy.sqrt(1. - ca*ca - cb*cb - cg*cg + 2 * ca * cb * cg)
@@ -271,6 +281,32 @@ def calc_gamma_nu_by_tth_phi(tth, phi):
     gamma = numpy.atan2(numpy.tan(tth), numpy.cos(phi))
     nu = numpy.arcsin(numpy.sin(tth), numpy.sin(phi))
     return gamma, nu
+
+
+def constraint_unit_cell_parameters_by_singony(unit_cell_parameters, singony:str='triclinic'):
+    """Give constrained unit cell parameters based on provided singony:
+
+    'cubic': [a, a, a, pi/2, pi/2, pi/2]
+    'hexagonal': [a, a, c, pi/2, pi/2, 2/3 pi]
+    'tetragonal': [a, a, c, pi/2, pi/2, pi/2]
+    'orthorombic': [a, b, c, pi/2, pi/2, pi/2]
+    'monoclinic': [a, b, c, pi/2, beta, pi/2]
+    'triclinic': [a, b, c, alpha, beta, gamma]
+    """
+    ucp = unit_cell_parameters
+    rad90 = numpy.pi * 0.5  * numpy.ones_like(ucp[0])
+    rad120 = numpy.pi * 2. / 3. * numpy.ones_like(ucp[0])
+    if singony.startswith('c'):
+        ucp = numpy.array([ucp[0], ucp[0], ucp[0], rad90, rad90, rad90], dtype=float)
+    elif singony.startswith('h'):
+        ucp = numpy.array([ucp[0], ucp[0], ucp[0], rad90, rad90, rad120], dtype=float)
+    elif singony.startswith('te'):
+        ucp = numpy.array([ucp[0], ucp[0], ucp[2], rad90, rad90, rad90], dtype=float)
+    elif singony.startswith('o'):
+        ucp = numpy.array([ucp[0], ucp[1], ucp[2], rad90, rad90, rad90], dtype=float)
+    elif singony.startswith('m'):
+        ucp = numpy.array([ucp[0], ucp[1], ucp[2], rad90, ucp[4], rad90], dtype=float)
+    return ucp
 
 
 # get ub functions
@@ -390,7 +426,6 @@ def choose_min_q123(np_q, mod_min_allowed = 0.03, ang_min = numpy.radians(55)):
     if not flag_q2:
         return False, q1, None, None
     # print("2: ", q2, mod_q2)
-    
     # choosing q3:
     flag_q3 = False
     for ind_3, ind in enumerate(np_ind_order[ind_1+1+ind_2+1:]):
@@ -412,6 +447,7 @@ def choose_min_q123(np_q, mod_min_allowed = 0.03, ang_min = numpy.radians(55)):
         return False, q1, q2, None
     # print("3: ", q3, mod_q3, q_cross)
     return True, q1, q2, q3
+
 
 def calc_unit_cell_parameters_by_b_matrix(np_b):
     abc_inv = numpy.sqrt(numpy.square(np_b).sum(axis=0))
