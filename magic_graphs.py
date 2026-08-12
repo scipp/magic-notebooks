@@ -137,6 +137,11 @@ def Q_vec_rot_from_elastic_Q_vec(*, Q_vec: sc.Variable, sample_rotation: sc.Vari
 def hkl_vec_from_elastic_Q_vec_rot(*, Q_vec_rot: sc.Variable, ub_matrix: sc.Variable) -> sc.Variable:
     return (sc.spatial.inv(ub_matrix) * Q_vec_rot) / (2 * numpy.pi)
 
+
+def calc_h_k_l(hkl_vec):
+    return {'h': hkl_vec.fields.x.copy(), 'k': hkl_vec.fields.y.copy(), 'l': hkl_vec.fields.z.copy()}
+
+
 def Q_vec_rot_from_elastic_hkl_vec(*, hkl_vec: sc.Variable, ub_matrix: sc.Variable) -> sc.Variable:
     return (ub_matrix * hkl_vec * 2 * numpy.pi)
 
@@ -304,6 +309,8 @@ graph_qvec = {
     ("Qx","Qy","Qz"): scipp_graph[("Qx","Qy","Qz")],
     "sample_position": calc_sample_position,
 }
+
+    
 graph_hkl = {
 
     "cell_volume": calc_cell_volume,
@@ -314,7 +321,7 @@ graph_hkl = {
     "l_reduced": calc_l_reduced,
     "hkl_vec": hkl_vec_from_elastic_Q_vec_rot,
     "ub_matrix": scipp_graph["ub_matrix"],
-    ("h","k","l"): scipp_graph[("h","k","l")],
+    ("h","k","l"): calc_h_k_l,
 }
 
 graph_hkl_inv = {
