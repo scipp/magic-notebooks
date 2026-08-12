@@ -146,58 +146,6 @@ def get_euler_opt(
     return (sc.scalar(ea_opt[0], unit="rad"), sc.scalar(ea_opt[1], unit="rad"), sc.scalar(ea_opt[2], unit="rad")), sc_b_matrix, res.fun
 
 
-
-def optimize_delta_t_delta_l(da):
-    def calc_chi_sq(x, da, coeff):
-        delta_t = x[0]
-        delta_l = x[1]
-        cell_a = x[2]
-        ea = x[3]
-        eb = x[4]
-        eg = x[5]
-        da.coords["delta_t"] = sc.scalar(delta_t, unit="s")
-        da.coords["delta_L"] = sc.scalar(delta_l, unit="m")
-        da.coords["cell_a"] = sc.scalar(cell_a, unit="Angstrom")
-        da.coords["cell_b"] = sc.scalar(cell_a, unit="Angstrom")
-        da.coords["cell_c"] = sc.scalar(cell_a, unit="Angstrom")
-        da.coords["euler_alpha"] = sc.scalar(ea, unit="rad")
-        da.coords["euler_beta"] = sc.scalar(eb, unit="rad")
-        da.coords["euler_gamma"] = sc.scalar(eg, unit="rad")
-        
-        magic_scipp.remove_coords_in_da(da, "h", "k", "l", "h_reduced", "k_reduced", "l_reduced", "hkl_vec","Q_vec_rot","Q_vec","Qx","Qy","Qz","wavelength", "tof", "Ltotal", "Q", "u_matrix", "b_matrix", "ub_matrix")
-        da2 = da.transform_coords(("h_reduced", "k_reduced", "l_reduced"), graph={**magic_graphs.graph_hkl, **magic_graphs.graph_qvec})
-        nd_delta_hkl = numpy.array([
-            da2.coords["h_reduced"].values,
-            da2.coords["k_reduced"].values,
-            da2.coords["l_reduced"].values,], dtype=float)    
-          
-        np_weight = da2.data.values
-        chi_sq = numpy.square(np_weight*(numpy.abs(nd_delta_hkl-0.5)-0.5)/numpy.expand_dims(coeff, axis=1)).sum()
-        return chi_sq
-    x0 = [
-        da.coords["delta_t"].to(unit="s").value, 
-        da.coords["delta_L"].to(unit="m").value,
-        da.coords["cell_a"].to(unit="Angstrom").value,
-        da.coords["euler_alpha"].to(unit="rad").value,
-        da.coords["euler_beta"].to(unit="rad").value,
-        da.coords["euler_gamma"].to(unit="rad").value,
-        ]
-    
-    coeff = numpy.array([da.coords["cell_a"].value, da.coords["cell_b"].value, da.coords["cell_c"].value], dtype=float)
-    print("Original chi_sq", calc_chi_sq(x0, da, coeff))
-    res = scipy.optimize.minimize(calc_chi_sq, x0, args=(da,coeff, ), method="BFGS")
-    print(res)
-    da.coords["delta_t"] = sc.scalar(res.x[0], unit="s")
-    da.coords["delta_L"] = sc.scalar(res.x[1], unit="m")
-    da.coords["cell_a"] = sc.scalar(res.x[2], unit="Angstrom")
-    da.coords["cell_b"] = sc.scalar(res.x[2], unit="Angstrom")
-    da.coords["cell_c"] = sc.scalar(res.x[2], unit="Angstrom")
-    da.coords["euler_alpha"] = sc.scalar(res.x[3], unit="rad")
-    da.coords["euler_beta"] = sc.scalar(res.x[4], unit="rad")
-    da.coords["euler_gamma"] = sc.scalar(res.x[5], unit="rad")
-    magic_scipp.remove_coords_in_da(da, "h", "k", "l", "h_reduced", "k_reduced", "l_reduced", "hkl_vec","Q_vec_rot","Q_vec","Qx","Qy","Qz","wavelength", "tof", "Ltotal", "Q", "u_matrix", "b_matrix", "ub_matrix")
-    return
-
 """
 
 import numpy
@@ -205,9 +153,9 @@ import scipy.optimize
 import np_cryst_functions
 
 def get_euler_opt_by_qvec(
-    unit_cell_parameters: numpy.ndarray,
     q_vec: numpy.ndarray, 
     sigma_q_vec: numpy.ndarray,
+    unit_cell_parameters: numpy.ndarray,
     euler_angles: numpy.ndarray,
     singony: str = 'triclinic',
     refine_unit_cell_parameters: bool = False, 
@@ -355,3 +303,5 @@ def get_euler_opt_by_qvec(
     ea_opt = ea_opt % (2.0 * numpy.pi)
     ub_matrix_final = np_cryst_functions.calc_orientation_matrix(*ea_opt) @ b_matrix_final
     return ucp_final, ea_opt, ub_matrix_final, res
+
+
