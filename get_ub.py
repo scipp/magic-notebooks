@@ -150,7 +150,65 @@ def get_euler_opt(
 
 import numpy
 import scipy.optimize
+
+import scipp
+
+import magic_scipp
+import magic_graphs
 import np_cryst_functions
+
+
+def get_l_index_for_unit_cell_parameters_by_singony(singony: str = 'triclinic'):
+    singony = singony.lower()
+    # Initial cell parameter vector
+    if singony.startswith('c'):
+        l_ind = [0, ]
+    elif singony.startswith('h') or singony.startswith('te'):
+        l_ind = [0, 2, ]
+    elif singony.startswith('o'):
+        l_ind = [0, 1, 2, ]
+    elif singony.startswith('m'):
+        l_ind = [0, 1, 2, 4, ]
+    else:
+        l_ind = [0, 1, 2, 3, 4, 5,]
+    return l_ind
+
+
+def get_unit_cell_parameters_by_x_singony(x_cell, singony: str = 'triclinic'):
+    singony = singony.lower()
+    # Initial cell parameter vector
+    rad90 = numpy.pi * 0.5
+    rad120 = numpy.pi * 2./3.
+    if singony.startswith('c'):
+        ucp = numpy.array(
+            [x_cell[0], x_cell[0], x_cell[0], rad90, rad90, rad90],
+            dtype=float)
+    elif singony.startswith('h'):
+        ucp = numpy.array(
+            [x_cell[0], x_cell[0], x_cell[1], rad120, rad90, rad120],
+            dtype=float)
+    elif singony.startswith('te'):
+        ucp = numpy.array(
+            [x_cell[0], x_cell[0], x_cell[1], rad90, rad90, rad90],
+            dtype=float)
+    elif singony.startswith('o'):
+        ucp = numpy.array(
+            [x_cell[0], x_cell[1], x_cell[2], rad90, rad90, rad90],
+            dtype=float)
+    elif singony.startswith('m'):
+        ucp = numpy.array(
+            [x_cell[0], x_cell[1], x_cell[2], rad90, x_cell[3], rad90],
+            dtype=float)
+    else:
+        ucp = numpy.array(x_cell[0:6], dtype=float)
+    return ucp
+
+
+def calc_b_matrix_by_x_and_singony(x_cell, singony: str = 'triclinic'):
+    ucp = get_unit_cell_parameters_by_x_singony(x_cell, singony=singony)
+    b_matrix = np_cryst_functions.calc_b_matrix(*ucp)
+    return b_matrix
+
 
 def get_euler_opt_by_qvec(
     q_vec: numpy.ndarray, 
@@ -198,44 +256,11 @@ def get_euler_opt_by_qvec(
     chi_sq_min : float
         Final chi-square value.
     """
-
-    singony = singony.lower()
-    # Initial cell parameter vector
-    if singony.startswith('c'):
-        l_ind = [0, ]
-    elif singony.startswith('h') or singony.startswith('te'):
-        l_ind = [0, 2, ]
-    elif singony.startswith('o'):
-        l_ind = [0, 1, 2, ]
-    elif singony.startswith('m'):
-        l_ind = [0, 1, 2, 4, ]
-    else:
-        l_ind = [0, 1, 2, 3, 4, 5,]
+    l_ind = get_l_index_for_unit_cell_parameters_by_singony()
     x_cell = [unit_cell_parameters[ind] for ind in l_ind]
-
-    rad90 = numpy.pi * 0.5
-    rad120 = numpy.pi * 2. / 3.
-
-    def calc_b_matrix_by_x(x_cell):
-        if singony.startswith('c'):
-            a = x_cell[0]
-            b_matrix = np_cryst_functions.calc_b_matrix(a, a, a, rad90, rad90, rad90)
-        elif singony.startswith('h'):
-            a, c = x_cell
-            b_matrix = np_cryst_functions.calc_b_matrix(a, a, c, rad90, rad90, rad120)
-        elif singony.startswith('te'):
-            a, c = x_cell
-            b_matrix = np_cryst_functions.calc_b_matrix(a, a, c, rad90, rad90, rad90)
-        elif singony.startswith('o'):
-            a, b, c = x_cell[0],x_cell[1],x_cell[2]
-            b_matrix = np_cryst_functions.calc_b_matrix(a, b, c, rad90, rad90, rad90)
-        elif singony.startswith('m'):
-            a, b, c, beta = x_cell
-            b_matrix = np_cryst_functions.calc_b_matrix(a, b, c, rad90, beta, rad90)
-        else:
-            a, b, c, alpha, beta, gamma = x_cell
-            b_matrix = np_cryst_functions.calc_b_matrix(a, b, c, alpha, beta, gamma)
-        return b_matrix
+    unit_cell_parameters = get_unit_cell_parameters_by_x_singony(
+        x_cell, singony=singony
+    )
 
     x0 = []
     if refine_euler_angles:
@@ -244,9 +269,8 @@ def get_euler_opt_by_qvec(
         x0.extend(x_cell)
 
     # Initial B matrix and volume
-    b_matrix_init = calc_b_matrix_by_x(x_cell)
-
-    ucp_init = np_cryst_functions.calc_unit_cell_parameters_by_b_matrix(b_matrix_init)
+    b_matrix_init = calc_b_matrix_by_x_and_singony(x_cell, singony=singony)
+    ucp_init = get_unit_cell_parameters_by_x_singony(x_cell, singony=singony)
     cell_volume_init = np_cryst_functions.calc_cell_volume(*ucp_init)
 
     cell_volume_max = 1.2 * cell_volume_init
@@ -259,7 +283,7 @@ def get_euler_opt_by_qvec(
             ea = euler_angles
             i_cell = 0
         if refine_unit_cell_parameters:
-            b_matrix = calc_b_matrix_by_x(x[i_cell:])
+            b_matrix = calc_b_matrix_by_x_and_singony(x[i_cell:], singony=singony)
         else:
             b_matrix = np_cryst_functions.calc_b_matrix(*ucp_init)
         u_matrix = np_cryst_functions.calc_orientation_matrix(*ea)
@@ -296,7 +320,7 @@ def get_euler_opt_by_qvec(
         i_cell = 0
 
     if refine_unit_cell_parameters:
-        b_matrix_final = calc_b_matrix_by_x(res.x[i_cell:])
+        b_matrix_final = calc_b_matrix_by_x_and_singony(res.x[i_cell:], singony=singony)
     else:
         b_matrix_final = b_matrix_init
     ucp_final = np_cryst_functions.calc_unit_cell_parameters_by_b_matrix(b_matrix_final)
@@ -305,56 +329,126 @@ def get_euler_opt_by_qvec(
     return ucp_final, ea_opt, ub_matrix_final, res
 
 
+def get_euler_opt_by_event(
+    l_da: list[scipp.DataArray],
+    unit_cell_parameters: numpy.ndarray,
+    euler_angles: numpy.ndarray,
+    delta_t_ms: float = 3,
+    delta_L_m: float = 0,
+    singony: str = 'triclinic',
+    refine_unit_cell_parameters: bool = False, 
+    refine_euler_angles: bool = True,
+    refine_delta_t_ms: bool = True,
+    refine_delta_L_m: bool = True,
+):
 
-import scipp as sc
+    def calc_chi_sq(x, l_da):
+        ind = 0
+        if refine_unit_cell_parameters:
+            unit_cell_parameters_loc = get_unit_cell_parameters_by_x_singony(
+                x[ind:(ind+len(l_ind_cell))], 
+                singony=singony
+            )
+            ind += len(l_ind_cell)
+        else:
+            unit_cell_parameters_loc = unit_cell_parameters
 
-def get_euler_opt_by_event(da):
-    def calc_chi_sq(x, da, coeff):
-        delta_t = x[0]
-        delta_l = x[1]
-        cell_a = x[2]
-        ea = x[3]
-        eb = x[4]
-        eg = x[5]
-        da.coords["delta_t"] = sc.scalar(delta_t, unit="s")
-        da.coords["delta_L"] = sc.scalar(delta_l, unit="m")
-        da.coords["cell_a"] = sc.scalar(cell_a, unit="Angstrom")
-        da.coords["cell_b"] = sc.scalar(cell_a, unit="Angstrom")
-        da.coords["cell_c"] = sc.scalar(cell_a, unit="Angstrom")
-        da.coords["euler_alpha"] = sc.scalar(ea, unit="rad")
-        da.coords["euler_beta"] = sc.scalar(eb, unit="rad")
-        da.coords["euler_gamma"] = sc.scalar(eg, unit="rad")
-        
-        magic_scipp.remove_coords_in_da(da, "h", "k", "l", "h_reduced", "k_reduced", "l_reduced", "hkl_vec","Q_vec_rot","Q_vec","Qx","Qy","Qz","wavelength", "tof", "Ltotal", "Q", "u_matrix", "b_matrix", "ub_matrix")
-        da2 = da.transform_coords(("h_reduced", "k_reduced", "l_reduced"), graph={**magic_graphs.graph_hkl, **magic_graphs.graph_qvec})
-        nd_delta_hkl = numpy.array([
-            da2.coords["h_reduced"].values,
-            da2.coords["k_reduced"].values,
-            da2.coords["l_reduced"].values,], dtype=float)    
-          
-        np_weight = da2.data.values
-        chi_sq = numpy.square(np_weight*(numpy.abs(nd_delta_hkl-0.5)-0.5)/numpy.expand_dims(coeff, axis=1)).sum()
+        if refine_euler_angles:
+            euler_angles_loc = x[ind:ind+3]
+            ind += 3
+        else:
+            euler_angles_loc = euler_angles
+
+        if refine_delta_t_ms:
+            delta_t_ms_loc = x[ind:ind+1][0]
+            ind += 1
+        else:
+            delta_t_ms_loc = delta_t_ms
+
+        if refine_delta_L_m:
+            delta_L_m_loc = x[ind:ind+1][0]
+            ind += 1
+        else:
+            delta_L_m_loc = delta_L_m
+
+        chi_sq = 0.
+        for da in l_da:
+            da.coords["delta_t"] = scipp.scalar(0.001*delta_t_ms_loc, unit="s")
+            da.coords["delta_L"] = scipp.scalar(delta_L_m_loc, unit="m")
+            da.coords["cell_a"] = scipp.scalar(unit_cell_parameters_loc[0], unit="Angstrom")
+            da.coords["cell_b"] = scipp.scalar(unit_cell_parameters_loc[1], unit="Angstrom")
+            da.coords["cell_c"] = scipp.scalar(unit_cell_parameters_loc[2], unit="Angstrom")
+            da.coords["cell_alpha"] = scipp.scalar(unit_cell_parameters_loc[3], unit="rad")
+            da.coords["cell_beta"] = scipp.scalar(unit_cell_parameters_loc[4], unit="rad")
+            da.coords["cell_gamma"] = scipp.scalar(unit_cell_parameters_loc[5], unit="rad")
+            da.coords["euler_alpha"] = scipp.scalar(euler_angles_loc[0], unit="rad")
+            da.coords["euler_beta"] = scipp.scalar(euler_angles_loc[1], unit="rad")
+            da.coords["euler_gamma"] = scipp.scalar(euler_angles_loc[2], unit="rad")
+
+            magic_scipp.remove_coords_in_da(
+                da, "h", "k", "l", "h_reduced", "k_reduced", "l_reduced",
+                "hkl_vec", "Q_vec_rot", "Q_vec", "Qx", "Qy", "Qz",
+                "wavelength", "tof", "Ltotal", "norm_Q",
+                "u_matrix", "b_matrix", "ub_matrix"
+            )
+            da2 = da.transform_coords(
+                ("h_reduced", "k_reduced", "l_reduced"),
+                graph={
+                    **magic_graphs.graph_hkl,
+                    **magic_graphs.graph_qvec,
+                    **magic_graphs.graph_detector
+                }
+            )
+            nd_delta_hkl = numpy.array([
+                da2.coords["h_reduced"].values,
+                da2.coords["k_reduced"].values,
+                da2.coords["l_reduced"].values,], dtype=float)
+
+            np_weight = da2.data.values
+            chi_sq += numpy.square(
+                np_weight*(numpy.abs(nd_delta_hkl-0.5)-0.5)).sum()
         return chi_sq
-    x0 = [
-        da.coords["delta_t"].to(unit="s").value, 
-        da.coords["delta_L"].to(unit="m").value,
-        da.coords["cell_a"].to(unit="Angstrom").value,
-        da.coords["euler_alpha"].to(unit="rad").value,
-        da.coords["euler_beta"].to(unit="rad").value,
-        da.coords["euler_gamma"].to(unit="rad").value,
-        ]
-    
-    coeff = numpy.array([da.coords["cell_a"].value, da.coords["cell_b"].value, da.coords["cell_c"].value], dtype=float)
-    print("Original chi_sq", calc_chi_sq(x0, da, coeff))
-    res = scipy.optimize.minimize(calc_chi_sq, x0, args=(da,coeff, ), method="BFGS")
-    print(res)
-    da.coords["delta_t"] = sc.scalar(res.x[0], unit="s")
-    da.coords["delta_L"] = sc.scalar(res.x[1], unit="m")
-    da.coords["cell_a"] = sc.scalar(res.x[2], unit="Angstrom")
-    da.coords["cell_b"] = sc.scalar(res.x[2], unit="Angstrom")
-    da.coords["cell_c"] = sc.scalar(res.x[2], unit="Angstrom")
-    da.coords["euler_alpha"] = sc.scalar(res.x[3], unit="rad")
-    da.coords["euler_beta"] = sc.scalar(res.x[4], unit="rad")
-    da.coords["euler_gamma"] = sc.scalar(res.x[5], unit="rad")
-    magic_scipp.remove_coords_in_da(da, "h", "k", "l", "h_reduced", "k_reduced", "l_reduced", "hkl_vec","Q_vec_rot","Q_vec","Qx","Qy","Qz","wavelength", "tof", "Ltotal", "Q", "u_matrix", "b_matrix", "ub_matrix")
-    return
+
+    x0 = []
+    l_ind_cell = get_l_index_for_unit_cell_parameters_by_singony(singony=singony)
+    if refine_unit_cell_parameters:
+        x_cell = [unit_cell_parameters[ind] for ind in l_ind_cell]
+        x0.extend(x_cell)
+    if refine_euler_angles:
+        x0.extend(list(euler_angles))
+    if refine_delta_t_ms:
+        x0.append(delta_t_ms)
+    if refine_delta_L_m:
+        x0.append(delta_L_m)
+
+    print("Original chi_sq", calc_chi_sq(x0, l_da))
+    res = scipy.optimize.minimize(calc_chi_sq, x0, args=(l_da, ), method="BFGS")
+
+    unit_cell_parameters_opt = unit_cell_parameters
+    euler_angles_opt = euler_angles
+    delta_t_ms_opt = delta_t_ms
+    delta_L_m_opt = delta_L_m
+
+    ind = 0 
+    if refine_unit_cell_parameters:
+        unit_cell_parameters_opt = get_unit_cell_parameters_by_x_singony(
+            res.x[ind:(ind+len(l_ind_cell))],
+            singony=singony
+        )
+        ind += len(l_ind_cell)
+    if refine_euler_angles:
+        euler_angles_opt = res.x[ind:ind+3]
+        ind += 3
+    if refine_delta_t_ms:
+        delta_t_ms_opt = res.x[ind:ind+1][0]
+        ind += 1
+    if refine_delta_L_m:
+        delta_L_m_opt = res.x[ind:ind+1][0]
+        ind += 1
+
+    b_matrix_final = np_cryst_functions.calc_b_matrix(*unit_cell_parameters)
+    ub_matrix_final = np_cryst_functions.calc_orientation_matrix(
+        *euler_angles) @ b_matrix_final
+
+    return unit_cell_parameters_opt, euler_angles_opt, delta_t_ms_opt, delta_L_m_opt, \
+        ub_matrix_final, res
