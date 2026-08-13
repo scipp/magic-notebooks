@@ -137,6 +137,13 @@ def Q_vec_rot_from_elastic_Q_vec(*, Q_vec: sc.Variable, sample_rotation: sc.Vari
 def hkl_vec_from_elastic_Q_vec_rot(*, Q_vec_rot: sc.Variable, ub_matrix: sc.Variable) -> sc.Variable:
     return (sc.spatial.inv(ub_matrix) * Q_vec_rot) / (2 * numpy.pi)
 
+def calc_ub_matrix(u_matrix, b_matrix):
+    ub_bl = scipp_graph["ub_matrix"](u_matrix=u_matrix, b_matrix=b_matrix)
+    to_ub_ess = np_cryst_functions.to_ub_ess
+    sc_to_ub_ess = get_sc_rotation_matrix(to_ub_ess)
+    ub_ess = sc_to_ub_ess * ub_bl
+    return ub_ess
+
 
 def calc_h_k_l(hkl_vec):
     return {'h': hkl_vec.fields.x.copy(), 'k': hkl_vec.fields.y.copy(), 'l': hkl_vec.fields.z.copy()}
@@ -144,7 +151,6 @@ def calc_h_k_l(hkl_vec):
 
 def Q_vec_rot_from_elastic_hkl_vec(*, hkl_vec: sc.Variable, ub_matrix: sc.Variable) -> sc.Variable:
     return (ub_matrix * hkl_vec * 2 * numpy.pi)
-
 
 
 def calc_sample_position(ideal_sample_position, sample_offset):
@@ -310,9 +316,7 @@ graph_qvec = {
     "sample_position": calc_sample_position,
 }
 
-    
 graph_hkl = {
-
     "cell_volume": calc_cell_volume,
     "b_matrix": calc_b_matrix,
     "u_matrix": calc_orientation_matrix,
@@ -320,7 +324,7 @@ graph_hkl = {
     "k_reduced": calc_k_reduced,
     "l_reduced": calc_l_reduced,
     "hkl_vec": hkl_vec_from_elastic_Q_vec_rot,
-    "ub_matrix": scipp_graph["ub_matrix"],
+    "ub_matrix": calc_ub_matrix,
     ("h","k","l"): calc_h_k_l,
 }
 

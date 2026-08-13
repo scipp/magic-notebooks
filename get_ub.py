@@ -287,7 +287,7 @@ def get_euler_opt_by_qvec(
         else:
             b_matrix = np_cryst_functions.calc_b_matrix(*ucp_init)
         u_matrix = np_cryst_functions.calc_orientation_matrix(*ea)
-        ub_matrix = u_matrix @ b_matrix
+        ub_matrix = np_cryst_functions.to_ub_ess @ u_matrix @ b_matrix
         hkl_int = numpy.linalg.inv(ub_matrix) @ q_vec
         hkl_int = numpy.round(hkl_int, 0)
         q_vec_ref = ub_matrix @ hkl_int
@@ -301,7 +301,7 @@ def get_euler_opt_by_qvec(
         return chi_sq
 
     if len(x0) == 0:
-        ub_matrix_init = np_cryst_functions.calc_orientation_matrix(*euler_angles) @ b_matrix_init
+        ub_matrix_init = np_cryst_functions.to_ub_ess @ np_cryst_functions.calc_orientation_matrix(*euler_angles) @ b_matrix_init
         return ucp_init, euler_angles, ub_matrix_init, {'fun': calc_chi_sq([]), 'message': 'No refined parameters'}
 
     if minimization_basinhopping:
@@ -325,7 +325,7 @@ def get_euler_opt_by_qvec(
         b_matrix_final = b_matrix_init
     ucp_final = np_cryst_functions.calc_unit_cell_parameters_by_b_matrix(b_matrix_final)
     ea_opt = ea_opt % (2.0 * numpy.pi)
-    ub_matrix_final = np_cryst_functions.calc_orientation_matrix(*ea_opt) @ b_matrix_final
+    ub_matrix_final = np_cryst_functions.to_ub_ess @ np_cryst_functions.calc_orientation_matrix(*ea_opt) @ b_matrix_final
     return ucp_final, ea_opt, ub_matrix_final, res
 
 
@@ -422,6 +422,16 @@ def get_euler_opt_by_event(
         x0.append(delta_L_m)
 
     print("Original chi_sq", calc_chi_sq(x0, l_da))
+
+    if len(x0) == 0:
+        l_ind = get_l_index_for_unit_cell_parameters_by_singony()
+        x_cell = [unit_cell_parameters[ind] for ind in l_ind]
+        b_matrix_init = calc_b_matrix_by_x_and_singony(x_cell, singony=singony)
+        ucp_init = get_unit_cell_parameters_by_x_singony(x_cell, singony=singony)
+        ub_matrix_init = np_cryst_functions.to_ub_ess @ np_cryst_functions.calc_orientation_matrix(*euler_angles) @ b_matrix_init
+        return ucp_init, euler_angles, delta_t_ms, delta_L_m, \
+            ub_matrix_init, {'fun': calc_chi_sq(x0, l_da), 'message': 'No refined parameters'}
+
     res = scipy.optimize.minimize(calc_chi_sq, x0, args=(l_da, ), method="BFGS")
 
     unit_cell_parameters_opt = unit_cell_parameters
@@ -429,7 +439,7 @@ def get_euler_opt_by_event(
     delta_t_ms_opt = delta_t_ms
     delta_L_m_opt = delta_L_m
 
-    ind = 0 
+    ind = 0
     if refine_unit_cell_parameters:
         unit_cell_parameters_opt = get_unit_cell_parameters_by_x_singony(
             res.x[ind:(ind+len(l_ind_cell))],
@@ -447,7 +457,7 @@ def get_euler_opt_by_event(
         ind += 1
 
     b_matrix_final = np_cryst_functions.calc_b_matrix(*unit_cell_parameters)
-    ub_matrix_final = np_cryst_functions.calc_orientation_matrix(
+    ub_matrix_final = np_cryst_functions.to_ub_ess @  np_cryst_functions.calc_orientation_matrix(
         *euler_angles) @ b_matrix_final
 
     return unit_cell_parameters_opt, euler_angles_opt, delta_t_ms_opt, delta_L_m_opt, \

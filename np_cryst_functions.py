@@ -1,23 +1,35 @@
 import numpy
 
+to_ub_ess = numpy.array([
+    [0., 0., 1.],
+    [0., 1., 0.],
+    [-1., 0., 0.],
+], dtype=float)
+
+
+# to_ub_ess = numpy.array([
+#     [1., 0., 0.],
+#     [0., 1., 0.],
+#     [0., 0., 1.],
+# ], dtype=float)
 
 def calc_wavelength(l_m, tof_ms):
     wavelength = 3.9556 * tof_ms / l_m
     return wavelength
 
 
-def calc_l_total(l_incident_beam, l_scattered_beam, delta_l:float=0.):
+def calc_l_total(l_incident_beam, l_scattered_beam, delta_l: float = 0.):
     l_total = l_incident_beam + l_scattered_beam - delta_l
     return l_total
 
 
-def calc_tof(toa_ms, delta_t_ms:float=0.):
+def calc_tof(toa_ms, delta_t_ms: float = 0.):
     tof_ms = toa_ms-delta_t_ms
     return tof_ms
 
 
 def calc_sample_position(ideal_sample_position, sample_offset):
-    sample_position = ideal_sample_position + sample_offset 
+    sample_position = ideal_sample_position + sample_offset
     return sample_position
 
 
@@ -135,39 +147,48 @@ def rotate_vector_around_Y_axis(vector, angle):
                         -vx*sa+vz*ca], dtype=float)
 
 
+def calc_q_for_hkl(hkl, UB, R):
+    """ hkl: [3, N]
+    UB and R: [3, 3]
+    out: [3, N]
+    """
+    Q = (R @ (UB @ hkl))
+    return Q
+
+
 def calc_gamma_nu_wavelength_for_hkl(h, k, l, UB, R):
-    hkl = numpy.vstack([h, k, l]).T
-    Q = (R @ (UB @ hkl.T)).T
-    Qnorm = numpy.linalg.norm(Q, axis=1)
-    cos_alpha = -Q[:,2]/Qnorm
+    hkl = numpy.vstack([h, k, l])
+    Q = calc_q_for_hkl(hkl, UB, R)
+    Qnorm = numpy.linalg.norm(Q, axis=0)
+    cos_alpha = -Q[2, :]/Qnorm
     wavelength = 2 * cos_alpha / Qnorm # 4*numpy.pi
     ki = numpy.zeros(Q.shape,dtype=float)
-    ki[:,2] = 1/wavelength # 2*numpy.pi
+    ki[2, :] = 1/wavelength # 2*numpy.pi
     kf = ki + Q
-    kf_x, kf_y, kf_z = kf[:,0], kf[:,1], kf[:,2]
-    
-    r = numpy.linalg.norm(kf, axis=1)
+    kf_x, kf_y, kf_z = kf[0, :], kf[1, :], kf[2, :]
+
+    r = numpy.linalg.norm(kf, axis=0)
 
     gamma = numpy.rad2deg(numpy.arctan2(kf_x, kf_z))      # horizontal angle
-    nu    = numpy.rad2deg(numpy.arcsin(kf_y / r))  
+    nu = numpy.rad2deg(numpy.arcsin(kf_y / r))
     return gamma, nu, wavelength
 
 
 def calc_tth_phi_wavelength_for_hkl(h, k, l, UB, R):
-    hkl = numpy.vstack([h, k, l]).T
-    Q = (R @ (UB @ hkl.T)).T
-    Qnorm = numpy.linalg.norm(Q, axis=1)
-    cos_alpha = -Q[:,2]/Qnorm
+    hkl = numpy.vstack([h, k, l])
+    Q = calc_q_for_hkl(hkl, UB, R)
+    Qnorm = numpy.linalg.norm(Q, axis=0)
+    cos_alpha = -Q[2, :]/Qnorm
     wavelength = 2 * cos_alpha / Qnorm # 4*numpy.pi
-    ki = numpy.zeros(Q.shape,dtype=float)
-    ki[:,2] = 1/wavelength # 2*numpy.pi
+    ki = numpy.zeros(Q.shape, dtype=float)
+    ki[2, :] = 1/wavelength # 2*numpy.pi
     kf = ki + Q
-    kf_x, kf_y, kf_z = kf[:,0], kf[:,1], kf[:,2]
-    
-    r = numpy.linalg.norm(kf, axis=1)
+    kf_x, kf_y, kf_z = kf[0, :], kf[1, :], kf[2, :]
+
+    r = numpy.linalg.norm(kf, axis=0)
 
     tth = numpy.rad2deg(numpy.arccos(kf_z/r))      # diffraction angle
-    phi    = numpy.rad2deg(numpy.arctan2(kf_y, kf_x))  
+    phi = numpy.rad2deg(numpy.arctan2(kf_y, kf_x))
     return tth, phi, wavelength
 
 
@@ -188,21 +209,20 @@ def generate_peak_data(UB, R, hmax, kmax, lmax, lambda_min, lambda_max):
     k = numpy.arange(-int(kmax), int(kmax+1))
     l = numpy.arange(-int(lmax), int(lmax+1))
     H, K, L = numpy.meshgrid(h, k, l, indexing='ij')
-    hkl = numpy.vstack([H.ravel(), K.ravel(), L.ravel()]).T
+    hkl = numpy.vstack([H.ravel(), K.ravel(), L.ravel()])
 
     # Remove (0,0,0)
-    hkl = hkl[numpy.any(hkl != 0, axis=1)]
+    hkl = hkl[:, numpy.any(hkl != 0, axis=0)]
 
     # --- 2. Compute Q vectors in lab frame ---
     # Apply UB and then rotation R
-    Q = (R @ (UB @ hkl.T)).T
+    Q = calc_q_for_hkl(hkl, UB, R)
 
     # Magnitude of Q
-    Qnorm = numpy.linalg.norm(Q, axis=1)
-
+    Qnorm = numpy.linalg.norm(Q, axis=0)
 
     # --- 3. Compute wavelength from Bragg condition ---
-    cos_alpha = -Q[:,2]/Qnorm
+    cos_alpha = -Q[2, :]/Qnorm
 
     wavelength = 2 * cos_alpha / Qnorm # 4*numpy.pi
 
@@ -210,23 +230,23 @@ def generate_peak_data(UB, R, hmax, kmax, lmax, lambda_min, lambda_max):
 
     # --- 4. Apply wavelength limits ---
     mask = (wavelength >= lambda_min) & (wavelength <= lambda_max)
-    hkl = hkl[mask]
-    Q = Q[mask]
+    hkl = hkl[:, mask]
+    Q = Q[:, mask]
     wavelength = wavelength[mask]
 
     # --- 5. Convert Q direction to detector angles (γ, ν) ---
-    ki = numpy.zeros(Q.shape,dtype=float)
-    ki[:,2] = 1/wavelength # 2*numpy.pi
+    ki = numpy.zeros(Q.shape, dtype=float)
+    ki[2, :] = 1/wavelength # 2*numpy.pi
     kf = ki + Q
-    kf_x, kf_y, kf_z = kf[:,0], kf[:,1], kf[:,2]
-    
-    r = numpy.linalg.norm(kf, axis=1)
+    kf_x, kf_y, kf_z = kf[0, :], kf[1, :], kf[2, :]
+
+    r = numpy.linalg.norm(kf, axis=0)
 
     gamma = numpy.rad2deg(numpy.arctan2(kf_x, kf_z))      # horizontal angle
-    nu    = numpy.rad2deg(numpy.arcsin(kf_y / r))       # vertical angle
+    nu = numpy.rad2deg(numpy.arcsin(kf_y / r))       # vertical angle
 
     # --- 6. Build final array ---
-    result = numpy.column_stack([hkl[:,0], hkl[:,1], hkl[:,2], gamma, nu, wavelength])
+    result = numpy.column_stack([hkl[0, :], hkl[1, :], hkl[2, :], gamma, nu, wavelength])
     return result
 
 
@@ -267,7 +287,7 @@ def calc_b_matrix(cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma):
             [b_11, b_12, b_13],
             [zero, b_22, b_23],
             [zero, zero, b_33],
-        ],dtype=float)
+        ], dtype=float)
     return b_matrix
 
 
@@ -283,7 +303,7 @@ def calc_gamma_nu_by_tth_phi(tth, phi):
     return gamma, nu
 
 
-def constraint_unit_cell_parameters_by_singony(unit_cell_parameters, singony:str='triclinic'):
+def constraint_unit_cell_parameters_by_singony(unit_cell_parameters, singony: str = 'triclinic'):
     """Give constrained unit cell parameters based on provided singony:
 
     'cubic': [a, a, a, pi/2, pi/2, pi/2]
@@ -294,18 +314,23 @@ def constraint_unit_cell_parameters_by_singony(unit_cell_parameters, singony:str
     'triclinic': [a, b, c, alpha, beta, gamma]
     """
     ucp = unit_cell_parameters
-    rad90 = numpy.pi * 0.5  * numpy.ones_like(ucp[0])
+    rad90 = numpy.pi * 0.5 * numpy.ones_like(ucp[0])
     rad120 = numpy.pi * 2. / 3. * numpy.ones_like(ucp[0])
     if singony.startswith('c'):
-        ucp = numpy.array([ucp[0], ucp[0], ucp[0], rad90, rad90, rad90], dtype=float)
+        ucp = numpy.array([ucp[0], ucp[0], ucp[0], rad90, rad90, rad90],
+                          dtype=float)
     elif singony.startswith('h'):
-        ucp = numpy.array([ucp[0], ucp[0], ucp[0], rad90, rad90, rad120], dtype=float)
+        ucp = numpy.array([ucp[0], ucp[0], ucp[0], rad90, rad90, rad120],
+                          dtype=float)
     elif singony.startswith('te'):
-        ucp = numpy.array([ucp[0], ucp[0], ucp[2], rad90, rad90, rad90], dtype=float)
+        ucp = numpy.array([ucp[0], ucp[0], ucp[2], rad90, rad90, rad90],
+                          dtype=float)
     elif singony.startswith('o'):
-        ucp = numpy.array([ucp[0], ucp[1], ucp[2], rad90, rad90, rad90], dtype=float)
+        ucp = numpy.array([ucp[0], ucp[1], ucp[2], rad90, rad90, rad90],
+                          dtype=float)
     elif singony.startswith('m'):
-        ucp = numpy.array([ucp[0], ucp[1], ucp[2], rad90, ucp[4], rad90], dtype=float)
+        ucp = numpy.array([ucp[0], ucp[1], ucp[2], rad90, ucp[4], rad90],
+                          dtype=float)
     return ucp
 
 
@@ -354,16 +379,17 @@ def get_ub(q_hkl):
      [q1[1], q2[1], q3[1]],
      [q1[2], q2[2], q3[2]],
     ], dtype=float)/(2*numpy.pi)
-    print(f"{ub[0,0]:9.5f} {ub[0,1]:9.5f} {ub[0,2]:9.5f}")
-    print(f"{ub[1,0]:9.5f} {ub[1,1]:9.5f} {ub[1,2]:9.5f}")
-    print(f"{ub[2,0]:9.5f} {ub[2,1]:9.5f} {ub[2,2]:9.5f}")
+    print(f"{ub[0, 0]:9.5f} {ub[0, 1]:9.5f} {ub[0, 2]:9.5f}")
+    print(f"{ub[1, 0]:9.5f} {ub[1, 1]:9.5f} {ub[1, 2]:9.5f}")
+    print(f"{ub[2, 0]:9.5f} {ub[2, 1]:9.5f} {ub[2, 2]:9.5f}")
 
     ucp = calc_unit_cell_parameters_by_b_matrix(ub)
     print(f"Unit cell parameters: {ucp[0]:9.5f} {ucp[1]:9.5f} {ucp[2]:9.5f} {numpy.degrees(ucp[3]):9.5f} {numpy.degrees(ucp[4]):9.5f} {numpy.degrees(ucp[5]):9.5f}")
     return ub, ucp
 
 
-def calc_sum_q1_q2(np_q1, np_q2, mod_min_allowed = 0.03, mod_max_allowed = 5.):
+def calc_sum_q1_q2(np_q1, np_q2,
+                   mod_min_allowed: float = 0.03, mod_max_allowed: float = 5.):
     l_res = []
     n_q1 = np_q1.shape[1]
     n_q2 = np_q2.shape[1]
@@ -372,7 +398,6 @@ def calc_sum_q1_q2(np_q1, np_q2, mod_min_allowed = 0.03, mod_max_allowed = 5.):
             val = np_q1[:, i1] + np_q2[:, i2]
             l_res.append(val)
     np_tot = numpy.stack(l_res, axis=1)
-
 
     np_tot_norm = numpy.sqrt(numpy.square(np_tot).sum(axis=0))
     np_flag = numpy.logical_and(
@@ -388,7 +413,11 @@ def calc_sum_q1_q2(np_q1, np_q2, mod_min_allowed = 0.03, mod_max_allowed = 5.):
     return np_tot
 
 
-def choose_min_q123(np_q, mod_min_allowed = 0.03, ang_min = numpy.radians(55)):
+def choose_min_q123(
+    np_q,
+    mod_min_allowed: float = 0.03,
+    ang_min: float = numpy.radians(55),
+):
     np_q_norm = numpy.sqrt(numpy.square(np_q).sum(axis=0))
     np_ind_order = numpy.argsort(np_q_norm)
     # for val in np_q.transpose():

@@ -14,10 +14,12 @@ import np_cryst_functions
 import peak_find_scipy
 import peak_find_skimage 
 
-def get_da_reduced(detector, bin_toa, count_min=0):    
+def get_da_reduced(detector, bin_toa, count_min=0, delta_L_m:float=0., delta_t_ms:float=3.):    
     detector_hist = detector.hist(toa=bin_toa)
     detector_hist.coords['toa'] = sc.midpoints(detector_hist.coords['toa'])
     detector_event = sc.flatten(detector_hist, to=detector.data[0].values.dims[0])
+    detector_event.coords['delta_L'] = sc.scalar(delta_L_m, unit='m')
+    detector_event.coords['delta_t'] = sc.scalar(0.001 * delta_t_ms, unit='s')
     return detector_event[(detector_event>count_min).data]
 
 
@@ -36,8 +38,8 @@ def move_data_from_dg_magic_to_da_reduced(dg_magic, da_reduced):
     assign_dg_to_da_coords(dg_magic['sample'], da_reduced, prefix="sample")
     da_reduced.coords['tp_position'] = dg_magic['tp_position']
     da_reduced.coords['source_position'] = dg_magic['source_position']
-    da_reduced.coords['delta_L'] = dg_magic['delta_L']
-    da_reduced.coords['delta_t'] = dg_magic['delta_t']
+    # da_reduced.coords['delta_L'] = dg_magic['delta_L']
+    # da_reduced.coords['delta_t'] = dg_magic['delta_t']
     return
 
 
