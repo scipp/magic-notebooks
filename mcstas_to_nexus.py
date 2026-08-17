@@ -34,8 +34,7 @@ def replace_dataset(entry, name, values):
 
 
 def detector_to_coda_format(
-    dg_detector,
-    detector_name,
+    da_detector,
     det_numbers:int,
     number_event: int = 100,
 ):
@@ -44,7 +43,6 @@ def detector_to_coda_format(
     Parameters
     ----------
     dg_detector: scipp DataGroup containing detector data
-    detector_name: 'detector_a' or 'detector_b'
 
     Returns
     -------
@@ -58,22 +56,8 @@ def detector_to_coda_format(
     - 'event_index'.
     """
     result = {}
-    # The read_h5 function returns a DataGroup with 'detector_a' or 'detector_b' key
-    if detector_name == 'detector_a':
-        detector_data = dg_detector['detector_a'] if (
-            'detector_a' in dg_detector
-        ) else (
-            list(dg_detector.values())[0]
-        )
+    detector_data = da_detector
 
-    elif detector_name == 'detector_b':
-        detector_data = dg_detector['detector_b'] if (
-            'detector_b' in dg_detector
-        ) else (
-            list(dg_detector.values())[0]
-        )
-    else:
-        raise ValueError(f"Unknown detector_name: {detector_name}")
     hh = sc.array(values=det_numbers, dims=('detector_number',))
     detector_data =  detector_data.group(hh)
 
@@ -94,8 +78,7 @@ def detector_to_coda_format(
 
     # Get the shape (number of events)
     n_events = event_id.size
-    print(f"  {detector_name}: {n_events} events")
-
+    
     # Prepare CODA-compatible data
     # The event_id values are the main payload for the CODA detector data
     toa = toa.to(unit='ns')
@@ -149,47 +132,43 @@ def mcstas_to_coda(
     shutil.copyfile(template_coda_file, outfile)
 
     # Read detector data from McStas file
-    print('Reading detector_a...')
-    dg_detector_a = read_h5.read_detector_a_from_nexus(mcstas_data_file)
+    print('Reading McStas file...')
+    dg_magic = read_h5.read_magic_from_nexus(mcstas_data_file)
 
-    # Try to read detector_b (may not be available)
-    try:
-        print('Reading detector_b...')
-        dg_detector_b = read_h5.read_detector_b_from_nexus(mcstas_data_file)
-        if len(dg_detector_b.keys()) == 0:
-            dg_detector_b = None
-    except Exception as e:
-        print(f'Could not read detector_b: {e}')
-        dg_detector_b = None
-
+    da_detector_a = dg_magic.get('detector_a', None)
+    da_detector_b = dg_magic.get('detector_b', None)
+    da_cave_monitor = dg_magic.get('cave_monitor', None)
+    dg_sample = dg_magic.get('sample', None)
+    
     # Convert to CODA format
-    print('Converting detector_a to CODA format...')
-    det_numbers_a = get_det_numbers(outfile, label_detector='a')
-    data_a = detector_to_coda_format(
-        dg_detector_a,
-        'detector_a',
-        det_numbers=det_numbers_a,
-        number_event=number_event_detector_a,
-    )
-    replace_detector_event(outfile, data_a, label_detector='a')
+    if not (da_detector_a is None):
+        print('Converting detector_a to CODA format...')
+        det_numbers_a = get_det_numbers(outfile, label_detector='a')
+        data_a = detector_to_coda_format(
+            da_detector_a,
+            det_numbers=det_numbers_a,
+            number_event=number_event_detector_a,
+        )
+        replace_detector_event(outfile, data_a, label_detector='a')
 
     # If detector_b is available
-    data_b = None
-    if dg_detector_b is not None:
+    if not (da_detector_b is None):
         print('Converting detector_b to CODA format...')
         det_numbers_b = get_det_numbers(outfile, label_detector='b')
         data_b = detector_to_coda_format(
-            dg_detector_b,
-            'detector_b',
+            da_detector_b,
             det_numbers=det_numbers_b,
             number_event=number_event_detector_b,
         )
         replace_detector_event(outfile, data_b, label_detector='b')
 
-
     # Monitor data
     # print('Converting cave monitor to CODA format...')
     # replace_monitor_event(outfile, data_cave_monitor)
+
+    # Sample data
+    print('Converting sample information to CODA format...')
+    replace_sample_information(outfile, dg_sample)
     
     # Remove user info
     print('Removing user info...')
@@ -199,11 +178,11 @@ def mcstas_to_coda(
                 del f[f'entry/{subgroup}']
 
     # Show output structure
-    print(f'\nOutput structure: ')
-    with h5.File(outfile, 'r') as f:
-        print("Output structure:")
-        for name, obj in f.items():
-            print_structure(obj)
+    # print(f'\nOutput structure: ')
+    # with h5.File(outfile, 'r') as f:
+    #     print("Output structure:")
+    #     for name, obj in f.items():
+    #         print_structure(obj)
     print(f'\nSuccessfully wrote {outfile}')
 
 
@@ -291,7 +270,6 @@ def replace_detector_event(
         )
             
 
-
 def replace_monitor_event(
     f_nexus: str,
     data_detector: dict,
@@ -321,6 +299,21 @@ def replace_monitor_event(
                 .to(unit=monitor_data["event_time_zero"].attrs["units"], copy=False)
                 .values.astype(int),
             )
+
+
+def replace_sample_information(
+    f_nexus: str,
+    dg_sample: dict,
+):
+    """Replace data in NeXuS file by data given in data_cave_monitor.
+    IK: Not tested yet.
+    """
+    with h5.File(f_nexus, 'r+') as f:
+        replace_dataset(
+            f[f'entry/instrument/sample_stick_rotation/value'], 
+            name="value", 
+            values=dg_sample['omega'].value
+        )
 
 
 if __name__ == '__main__':
