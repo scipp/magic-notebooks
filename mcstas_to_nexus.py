@@ -355,12 +355,12 @@ if __name__ == '__main__':
     template_coda_file = '/ess/raw/coda/999999/raw/coda_magic_999999_00014893.hdf'
     outfile = directory_path + "/mccode.nxs"
 
-    mcstas_data_file = "mccode.h5"
-    template_coda_file = 'coda_magic_999999_00016485.hdf'
-    outfile = "mccode.nxs"
+    # mcstas_data_file = "/Users/iuriikibalin/Documents/files/Areas/ESS/McStas_Simulation_MAGiC/powder_Ge_10/mccode.h5"
+    # template_coda_file = 'coda_magic_999999_00016485.hdf'
+    # outfile = "/Users/iuriikibalin/Documents/files/Areas/ESS/McStas_Simulation_MAGiC/powder_Ge_10/mccode.nxs"
     
-    number_event_detector_a = 1000
-    number_event_detector_b = 10
+    number_event_detector_a = 100000
+    number_event_detector_b = 100000
     number_event_cave_monitor = 10000
     mcstas_to_coda(
         mcstas_data_file=mcstas_data_file,
