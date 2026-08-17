@@ -122,6 +122,7 @@ def detector_to_coda_format(
     event_index = sc.cumsum(event_index.bins.size())
     event_index.values = np.concatenate([[0], event_index.values[:-1]])
     result['event_index'] = event_index
+    result['detector_rotation_value'] = detector_data.coords['gamma']
     return result
 
 
@@ -281,6 +282,14 @@ def replace_detector_event(
             'event_index',
             data_detector['event_index'].data.values,
         )
+        
+        det_group_rotation = f[f'entry/instrument/detector_{label_detector:}_rotation']
+        replace_dataset(
+            det_group_rotation['value'],
+            'value',
+            data_detector['detector_rotation_value'].value,
+        )
+            
 
 
 def replace_monitor_event(
@@ -320,9 +329,9 @@ if __name__ == '__main__':
     template_coda_file = '/ess/raw/coda/999999/raw/coda_magic_999999_00014893.hdf'
     outfile = directory_path + "/mccode.nxs"
 
-    mcstas_data_file = "mccode.h5"
-    template_coda_file = 'coda_magic_999999_00016485.hdf'
-    outfile = "mccode.nxs"
+    # mcstas_data_file = "mccode.h5"
+    # template_coda_file = 'coda_magic_999999_00016485.hdf'
+    # outfile = "mccode.nxs"
     
     number_event_detector_a = 1000
     number_event_detector_b = 10
