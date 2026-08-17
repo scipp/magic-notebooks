@@ -33,9 +33,31 @@ def replace_dataset(entry, name, values):
     dset.attrs.update(attrs)
 
 
+def cave_monitor_to_coda_format(
+    da_cave_monitor,
+    number_event: int = 100,
+):
+    result = {}
+
+    event_probability = da_cave_monitor.values
+    event_ind = sample_event_indices(event_probability, number_event,)
+
+    
+    toa = da_cave_monitor.coords["toa"][event_ind]
+    toa = toa.to(unit='ns')
+    event_id = sc.zeros_like(toa, unit='')
+
+    result['toa'] = toa
+    result['event_id'] = event_id
+    event_time_offset, event_index  = convert_toa_to_offset_index(toa)
+    result['event_time_offset'] = event_time_offset
+    result['event_index'] = event_index
+    return result
+
+
 def detector_to_coda_format(
     da_detector,
-    det_numbers:int,
+    det_numbers: np.ndarray,
     number_event: int = 100,
 ):
     """Convert scipp DataGroup from read_h5 to CODA HDF5 format.
@@ -65,7 +87,10 @@ def detector_to_coda_format(
     event_probability = detector_data.bins.data.bins.concat().value.values
     event_ind = sample_event_indices(event_probability, number_event,)
 
+
     toa = detector_data.bins.coords["toa"].bins.concat().value[event_ind]
+    toa = toa.to(unit='ns')
+    
     # IMPORTANT! we need to sort the arrays below according to toa,
     # so that the event_index does not get messed up!    
     event_id = sc.sort(
@@ -75,16 +100,22 @@ def detector_to_coda_format(
         ),
         key=toa,
     )
-
-    # Get the shape (number of events)
-    n_events = event_id.size
     
     # Prepare CODA-compatible data
     # The event_id values are the main payload for the CODA detector data
-    toa = toa.to(unit='ns')
     result['toa'] = toa
     result['event_id'] = event_id
+    event_time_offset, event_index  = convert_toa_to_offset_index(toa)
+    result['event_time_offset'] = event_time_offset
+    result['event_index'] = event_index
 
+    result['detector_rotation_value'] = detector_data.coords['gamma']
+    return result
+
+
+def convert_toa_to_offset_index(toa):
+    """Converting absolute time of arraival to offset, and event index.
+    """
     unit = toa.unit
     period = (1.0 / sc.scalar(14.0, unit="Hz")).to(unit=unit)
     start = sc.datetime("2026-01-01T12:00:00.000000000")
@@ -95,7 +126,6 @@ def detector_to_coda_format(
     )
 
     event_time_offset = sc.sort(toa % period.to(unit=toa.unit), key=toa)
-    result['event_time_offset'] = event_time_offset
 
     event_index = sc.DataArray(
         data=sc.ones_like(event_time_offset),
@@ -103,10 +133,8 @@ def detector_to_coda_format(
     ).group("event_time_zero")
 
     event_index = sc.cumsum(event_index.bins.size())
-    event_index.values = np.concatenate([[0], event_index.values[:-1]])
-    result['event_index'] = event_index
-    result['detector_rotation_value'] = detector_data.coords['gamma']
-    return result
+    event_index.values = np.concatenate([[0], event_index.values[:-1]])    
+    return event_time_offset, event_index
 
 
 def mcstas_to_coda(
@@ -115,6 +143,7 @@ def mcstas_to_coda(
     outfile: str,
     number_event_detector_a: int = 1000,
     number_event_detector_b: int = 100,
+    number_event_cave_monitor: int = 10000,
 ):
     """Store the events from a McStas MAGiC simulation in a CODA HDF5 file.
 
@@ -163,8 +192,10 @@ def mcstas_to_coda(
         replace_detector_event(outfile, data_b, label_detector='b')
 
     # Monitor data
-    # print('Converting cave monitor to CODA format...')
-    # replace_monitor_event(outfile, data_cave_monitor)
+    if not (da_cave_monitor is None):
+        print('Converting cave monitor to CODA format...')
+        data_cm = cave_monitor_to_coda_format(da_cave_monitor, number_event=number_event_cave_monitor)
+        replace_monitor_event(outfile, data_cm)
 
     # Sample data
     print('Converting sample information to CODA format...')
@@ -272,33 +303,35 @@ def replace_detector_event(
 
 def replace_monitor_event(
     f_nexus: str,
-    data_detector: dict,
+    data_monitor: dict,
 ):
     """Replace data in NeXuS file by data given in data_cave_monitor.
     IK: Not tested yet.
     """
-
     with h5.File(f_nexus, 'r+') as f:
-        if monitor_entry_path is not None:
-            monitor_data = f[f"{monitor_entry_path}/monitor_3_events"]
-            replace_dataset(
-                monitor_data, name="event_id", values=np.zeros_like(event_id.values)
-            )
-            replace_dataset(
-                monitor_data,
-                name="event_time_offset",
-                values=event_time_offset.to(
-                    unit=monitor_data["event_time_offset"].attrs["units"], copy=False
-                ).values,
-            )
-            replace_dataset(monitor_data, name="event_index", values=event_index.values)
-            replace_dataset(
-                monitor_data,
-                name="event_time_zero",
-                values=event_index.coords["event_time_zero"]
-                .to(unit=monitor_data["event_time_zero"].attrs["units"], copy=False)
-                .values.astype(int),
-            )
+        det_group = f[f'entry/instrument/beam_monitor_1']
+        det_event_data = det_group[f'beam_monitor_1_events']
+
+        replace_dataset(
+            det_event_data,
+            'event_id',
+            data_monitor['event_id'].values,
+        )
+        replace_dataset(
+            det_event_data,
+            'event_time_offset',
+            data_monitor['event_time_offset'].values,
+        )
+        replace_dataset(
+            det_event_data,
+            'event_time_zero',
+            data_monitor['event_index'].coords['event_time_zero'].values.astype(int),
+        )
+        replace_dataset(
+            det_event_data,
+            'event_index',
+            data_monitor['event_index'].data.values,
+        )
 
 
 def replace_sample_information(
@@ -322,16 +355,18 @@ if __name__ == '__main__':
     template_coda_file = '/ess/raw/coda/999999/raw/coda_magic_999999_00014893.hdf'
     outfile = directory_path + "/mccode.nxs"
 
-    # mcstas_data_file = "mccode.h5"
-    # template_coda_file = 'coda_magic_999999_00016485.hdf'
-    # outfile = "mccode.nxs"
+    mcstas_data_file = "mccode.h5"
+    template_coda_file = 'coda_magic_999999_00016485.hdf'
+    outfile = "mccode.nxs"
     
     number_event_detector_a = 1000
     number_event_detector_b = 10
+    number_event_cave_monitor = 10000
     mcstas_to_coda(
         mcstas_data_file=mcstas_data_file,
         template_coda_file=template_coda_file,
         outfile=outfile,
         number_event_detector_a=number_event_detector_a,
         number_event_detector_b=number_event_detector_b,
+        number_event_cave_monitor=number_event_cave_monitor,
     )
