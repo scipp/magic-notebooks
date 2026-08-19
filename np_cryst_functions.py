@@ -164,7 +164,7 @@ def calc_gamma_nu_wavelength_for_hkl(h, k, l, UB, R):
     wavelength = 2 * cos_alpha / Qnorm # 4*numpy.pi
     ki = numpy.zeros(Q.shape,dtype=float)
     ki[2, :] = 1/wavelength # 2*numpy.pi
-    kf = ki + Q
+    kf = ki - Q # definition of q like in scipp
     kf_x, kf_y, kf_z = kf[0, :], kf[1, :], kf[2, :]
 
     r = numpy.linalg.norm(kf, axis=0)
@@ -182,7 +182,7 @@ def calc_tth_phi_wavelength_for_hkl(h, k, l, UB, R):
     wavelength = 2 * cos_alpha / Qnorm # 4*numpy.pi
     ki = numpy.zeros(Q.shape, dtype=float)
     ki[2, :] = 1/wavelength # 2*numpy.pi
-    kf = ki + Q
+    kf = ki - Q # definition of q like in scipp
     kf_x, kf_y, kf_z = kf[0, :], kf[1, :], kf[2, :]
 
     r = numpy.linalg.norm(kf, axis=0)
@@ -192,61 +192,150 @@ def calc_tth_phi_wavelength_for_hkl(h, k, l, UB, R):
     return tth, phi, wavelength
 
 
-def generate_peak_data(UB, R, hmax, kmax, lmax, lambda_min, lambda_max):
+def generate_peak_data(
+    UB: numpy.ndarray, R: numpy.ndarray,
+    lambda_min: float, lambda_max: float,
+    gamma_min: float = 0.0, gamma_max: float = numpy.pi,
+    nu_min: float = -numpy.pi/2, nu_max: float = numpy.pi/2,
+    propagation_vector: numpy.ndarray = None
+):
     """
     Generate synthetic diffraction peak data based on:
     - UB matrix (3x3)
     - crystal rotation matrix R (3x3)
-    - HKL range: -hmax..hmax etc.
     - wavelength range (lambda_min, lambda_max)
+    - detector angular limits (gamma_min/max, nu_min/max)
+    - optional propagation vector k (default: None → k = (0,0,0))
 
-    Returns array with columns:
-    [h, k, l, gamma_deg, nu_deg, wavelength]
+    HKL bounds are computed automatically from UB, wavelength, and angle limits.
     """
 
+    # --- Parameter validation ---
+    if gamma_min < 0.:
+        raise ValueError("gamma_min cannot be below 0 radians.")
+    if gamma_max > numpy.pi:
+        raise ValueError("gamma_max cannot exceed π radians.")
+    if gamma_min > gamma_max:
+        raise ValueError("gamma_min cannot be greater than gamma_max.")
+
+    if nu_min < -numpy.pi/2:
+        raise ValueError("nu_min cannot be below -π/2 radians.")
+    if nu_max > numpy.pi/2:
+        raise ValueError("nu_max cannot exceed +π/2 radians.")
+    if nu_min > nu_max:
+        raise ValueError("nu_min cannot be greater than nu_max.")
+
+    if lambda_min < 0.:
+        raise ValueError("lambda_min cannot be below 0 Å.")
+    if lambda_max > 20.:
+        raise ValueError("lambda_max cannot exceed 20 Å.")
+    if lambda_min > lambda_max:
+        raise ValueError("lambda_min cannot be greater than lambda_max.")
+
+    # --- Propagation vector ---
+    if propagation_vector is None:
+        kvec = numpy.zeros(3)
+    else:
+        kvec = numpy.asarray(propagation_vector, dtype=float)
+        if kvec.shape != (3,):
+            raise ValueError("propagation_vector must be a 3-element array.")
+
+    # --- 0. Compute HKL bounds from Q-range ---
+    gamma_vals = numpy.array([gamma_min, gamma_max])
+    nu_vals = numpy.array([nu_min, nu_max])
+
+    dirs = []
+    for g in gamma_vals:
+        for n in nu_vals:
+            x = numpy.sin(g) * numpy.cos(n)
+            y = numpy.sin(n)
+            z = numpy.cos(g) * numpy.cos(n)
+            dirs.append([x, y, z])
+    dirs = numpy.array(dirs).T
+
+    Q_extremes = []
+    for lam in [lambda_min, lambda_max]:
+        ki = numpy.array([0, 0, 1/lam])[:, None]
+        kf = dirs / lam
+        Q = ki - kf # according to scipp definition
+        Q_extremes.append(Q)
+
+    Q_extremes = numpy.hstack(Q_extremes)
+
+    RUB_inv = numpy.linalg.inv(R @ UB)
+    hkl_ext = RUB_inv @ Q_extremes
+
+    h_min, h_max = numpy.floor(hkl_ext[0].min()), numpy.ceil(hkl_ext[0].max())
+    k_min, k_max = numpy.floor(hkl_ext[1].min()), numpy.ceil(hkl_ext[1].max())
+    l_min, l_max = numpy.floor(hkl_ext[2].min()), numpy.ceil(hkl_ext[2].max())
+
     # --- 1. Generate HKL grid ---
-    h = numpy.arange(-int(hmax), int(hmax+1))
-    k = numpy.arange(-int(kmax), int(kmax+1))
-    l = numpy.arange(-int(lmax), int(lmax+1))
+    h = numpy.arange(h_min, h_max + 1)
+    k = numpy.arange(k_min, k_max + 1)
+    l = numpy.arange(l_min, l_max + 1)
+
     H, K, L = numpy.meshgrid(h, k, l, indexing='ij')
     hkl = numpy.vstack([H.ravel(), K.ravel(), L.ravel()])
-
-    # Remove (0,0,0)
     hkl = hkl[:, numpy.any(hkl != 0, axis=0)]
 
-    # --- 2. Compute Q vectors in lab frame ---
-    # Apply UB and then rotation R
-    Q = calc_q_for_hkl(hkl, UB, R)
+    # --- 2. Apply propagation vector ---
+    # Q = UB * (hkl + k)
+    hkl_shifted = hkl + kvec[:, None]
 
-    # Magnitude of Q
+    Q = calc_q_for_hkl(hkl_shifted, UB, R)
     Qnorm = numpy.linalg.norm(Q, axis=0)
 
-    # --- 3. Compute wavelength from Bragg condition ---
-    cos_alpha = -Q[2, :]/Qnorm
-
-    wavelength = 2 * cos_alpha / Qnorm # 4*numpy.pi
-
-    # wavelength = 4*numpy.pi / Qnorm
-
+    # --- 3. Compute wavelength ---
+    cos_alpha = Q[2] / Qnorm               # ESS coordinate system: Z along incident beam
+    wavelength = 2 * cos_alpha / Qnorm
     # --- 4. Apply wavelength limits ---
     mask = (wavelength >= lambda_min) & (wavelength <= lambda_max)
     hkl = hkl[:, mask]
+
+    hkl_shifted = hkl_shifted[:, mask]
     Q = Q[:, mask]
     wavelength = wavelength[mask]
 
-    # --- 5. Convert Q direction to detector angles (γ, ν) ---
-    ki = numpy.zeros(Q.shape, dtype=float)
-    ki[2, :] = 1/wavelength # 2*numpy.pi
-    kf = ki + Q
-    kf_x, kf_y, kf_z = kf[0, :], kf[1, :], kf[2, :]
-
+    # --- 5. Compute detector angles ---
+    ki = numpy.zeros(Q.shape)
+    ki[2] = 1 / wavelength
+    kf = ki - Q
+    kf_x, kf_y, kf_z = kf[0], kf[1], kf[2]
     r = numpy.linalg.norm(kf, axis=0)
 
-    gamma = numpy.rad2deg(numpy.arctan2(kf_x, kf_z))      # horizontal angle
-    nu = numpy.rad2deg(numpy.arcsin(kf_y / r))       # vertical angle
+    gamma = numpy.arctan2(kf_x, kf_z)
+    nu = numpy.arcsin(kf_y / r)
 
-    # --- 6. Build final array ---
-    result = numpy.column_stack([hkl[0, :], hkl[1, :], hkl[2, :], gamma, nu, wavelength])
+    # --- 6. Apply gamma/nu limits ---
+    mask_ang = (
+        (gamma >= gamma_min) & (gamma <= gamma_max) &
+        (nu >= nu_min) & (nu <= nu_max)
+    )
+
+    hkl = hkl[:, mask_ang]
+    gamma = gamma[mask_ang]
+    nu = nu[mask_ang]
+    wavelength = wavelength[mask_ang]
+
+    # --- 7. Final output as structured NumPy array ---
+    dtype = [
+        ('h', 'f4'),
+        ('k', 'f4'),
+        ('l', 'f4'),
+        ('gamma', 'f8'),
+        ('nu', 'f8'),
+        ('wavelength', 'f8')
+    ]
+
+    result = numpy.zeros(hkl.shape[1], dtype=dtype)
+
+    result['h'] = hkl[0]
+    result['k'] = hkl[1]
+    result['l'] = hkl[2]
+    result['gamma'] = gamma
+    result['nu'] = nu
+    result['wavelength'] = wavelength
+
     return result
 
 
