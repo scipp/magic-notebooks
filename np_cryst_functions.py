@@ -194,7 +194,7 @@ def calc_tth_phi_wavelength_for_hkl(h, k, l, UB, R):
 
 def generate_peak_data(
     UB: numpy.ndarray, R: numpy.ndarray,
-    lambda_min: float, lambda_max: float,
+    lambda_min: float = 0., lambda_max: float = 20.,
     gamma_min: float = 0.0, gamma_max: float = numpy.pi,
     nu_min: float = -numpy.pi/2, nu_max: float = numpy.pi/2,
     propagation_vector: numpy.ndarray = None
@@ -241,8 +241,10 @@ def generate_peak_data(
             raise ValueError("propagation_vector must be a 3-element array.")
 
     # --- 0. Compute HKL bounds from Q-range ---
-    gamma_vals = numpy.array([gamma_min, gamma_max])
-    nu_vals = numpy.array([nu_min, nu_max])
+    n_gamma = 100
+    n_nu = 100
+    gamma_vals = numpy.linspace(gamma_min, gamma_max, n_gamma)
+    nu_vals = numpy.linspace(nu_min, nu_max, n_nu)
 
     dirs = []
     for g in gamma_vals:

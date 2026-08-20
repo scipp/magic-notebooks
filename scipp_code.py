@@ -5,6 +5,7 @@
 import os
 import pathlib
 import numpy 
+from numpy.lib import recfunctions as rfn
 import scipy
 from scipy.ndimage import label, center_of_mass, sum as ndi_sum
 
@@ -30,10 +31,9 @@ import np_cryst_functions
 from resolver import ParameterResolver
 
 import importlib
-importlib.reload(np_cryst_functions)
-importlib.reload(operations_with_da)
-importlib.reload(magic_graphs)
 
+
+import mridul_position
 
 # Preprocessing
 
@@ -44,11 +44,34 @@ importlib.reload(magic_graphs)
 # Uncomment the cell below to run a McStas simulation using the provided [McStas model](https://git.esss.dk/dmsc-instrumentmodels/magic). This will take some time.
 
 # The simulation file contains information about event data on the detector and information from the cave monitor
+import scippnexus
+dg_nexus = scippnexus.load('mccode.nxs')
+detector_a = dg_nexus['entry']['instrument']['magic_detector_a']
+event_ids = detector_a['magic_detector_a_event_data'].coords['detector_number'].values
+mridul_position.event_positions(dg_nexus, event_ids)
+
+vertices = detector_a["pixel_shape"]["vertices"].to(unit="m")
+detector_number_size = vertices.size//8
+vertices_fold = vertices.fold(
+            dim="vertex",
+            sizes={"detector_number": detector_number_size, "faces": 4, 'side':2},
+        )
+
+vertices_lr = sc.mean(vertices_fold, dim='faces')
+A = vertices_lr.values
+idx = numpy.arange(A.shape[0]) % 2
+result = A[numpy.arange(A.shape[0]), idx,:]
+local_position = sc.vectors(dims=('detector_number',), values = result, unit='m')
 
 
-f_nexus_data = r"/Users/iuriikibalin/Documents/files/Areas/ESS/McStas_Simulation_MAGiC/SC_fe4o5_10/mccode.h5"
+
+transform = detector_a["depends_on"].compute()
+transform = transform["time", 0].data
+
+
+
+f_nexus_data = r"/Users/iuriikibalin/Documents/files/Areas/ESS/McStas_Simulation_MAGiC/sim_SC_test/mccode.h5"
 dg_magic = read_h5.read_magic_from_nexus(f_nexus_data)
-
 
 dg_sample = dg_magic['sample']
 da_det_a = dg_magic['detector_a']
@@ -61,12 +84,14 @@ t_step = sc.scalar(unit=t_min.unit, value=1e-3)
 bin_toa = operations_with_da.get_bin_by_step('toa', t_min.value, t_max.value, t_step.value, t_min.unit)
 da_reduced = operations_with_da.get_da_reduced(da_det_a, bin_toa, count_min=0)
 
-da_reduced = da_reduced.transform_coords(("event_gamma",'event_r', 'event_position_global'), graph=magic_graphs.graph_detector, rename_dims=False)
+da_reduced = da_reduced.transform_coords(
+    ("event_gamma",'event_r', 'event_position_global'),
+    graph=magic_graphs.graph_detector,
+    rename_dims=False
+)
 
 operations_with_da.move_data_from_dg_magic_to_da_reduced(dg_magic, da_reduced)
-da_reduced = da_reduced.transform_coords(('norm_Q', ), graph=magic_graphs.graph_qvec, rename_dims=False)
-
-
+da_reduced = da_reduced.transform_coords(('norm_Q', 'Qx', ), graph=magic_graphs.graph_qvec, rename_dims=False)
 
 g_min = da_reduced.coords['event_gamma'].min().value
 g_max = da_reduced.coords['event_gamma'].max().value
@@ -76,18 +101,144 @@ n_min = da_reduced.coords['event_nu'].min().value
 n_max = da_reduced.coords['event_nu'].max().value
 bin_nu = operations_with_da.get_bin_by_step('event_nu', n_min, n_max, numpy.radians(0.3), da_reduced.coords['event_nu'].unit)
 
+da_hist_tgn = da_reduced.hist(
+    toa=bin_toa,
+    event_gamma=bin_gamma,
+    event_nu=bin_nu,
+)
 
-da_hist_tgn = da_reduced.hist(toa=bin_toa, event_gamma=bin_gamma, event_nu=bin_nu)
+peaks_tgn = operations_with_da.find_peaks_hist(da_hist_tgn, threshold=0.1, flag_variance=True, binary_dilation=2)
 
-peaks_tgn = operations_with_da.find_peaks_hist(da_hist_tgn,threshold=0.1, flag_variance=True, binary_dilation=2)
+
+
+events_xyz = numpy.array([
+    da_reduced.coords['event_gamma'].values, 
+    da_reduced.coords['event_nu'].values, 
+    da_reduced.coords['toa'].values,
+], dtype=float)
+
+events_weight = da_reduced.data.values
+
+
+
+peaks_xyz_sigma = numpy.array([
+    peaks_tgn.coords['event_gamma_sigma'].values, 
+    peaks_tgn.coords['event_nu_sigma'].values, 
+    peaks_tgn.coords['toa_sigma'].values,
+], dtype=float)
+
+box_half_sizes = 3. * peaks_xyz_sigma.mean(axis=1) / 2.
+bg_inner_half_sizes = box_half_sizes
+bg_outer_half_sizes = bg_inner_half_sizes + box_half_sizes * 0.5
+
+m_ub = numpy.array([[1./2., 0, 0], [0, 1./4.5, 0], [0, 0, 1./10.]], dtype=float)
+m_r = numpy.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=float)
+lambda_min, lambda_max = 0.5, 3.5
+
+importlib.reload(np_cryst_functions)
+
+np_peak = np_cryst_functions.generate_peak_data(
+    m_ub,
+    m_r,
+    lambda_min=lambda_min,
+    lambda_max=lambda_max,
+)
+
+delta_l = da_reduced.coords['delta_L'].values
+delta_t = da_reduced.coords['delta_t'].values 
+l_total = da_reduced.coords['Ltotal'].values.mean()
+
+toa = delta_t + 0.001 * (l_total-delta_l)/3.9556/np_peak['wavelength']
+
+np_peak = rfn.append_fields(
+    np_peak,
+    names='toa',
+    data=toa,
+    dtypes='f8',
+    usemask=False
+)
+
+peaks_xyz = numpy.stack([np_peak['gamma'], np_peak['nu'], np_peak['toa']], axis=0)
+
+
+preassign_nonoverlapping, ls_problems, l_peak_problem_ind = \
+    integrate_peaks.check_peak_background_overlaps(
+        peaks_xyz.T,
+        box_half_sizes,
+        bg_inner_half_sizes,
+        bg_outer_half_sizes,
+    )
+
+l_ind = sorted(set(range(peaks_xyz.shape[1])) - set(l_peak_problem_ind))
+
+peaks_xyz = peaks_xyz[:, l_ind]
+preassign_nonoverlapping = True
+
+intensity, error = integrate_peaks.integrate_peaks_md_box_memorysafe(
+    events_xyz.T,
+    events_weight,
+    peaks_xyz.T,
+    box_half_sizes,
+    bg_inner_half_sizes=bg_inner_half_sizes,
+    bg_outer_half_sizes=bg_outer_half_sizes,
+    metadata_mask=None,
+    preassign_nonoverlapping=preassign_nonoverlapping,
+)
+
+np_peak_small = np_peak[l_ind]
+
+
+np_peak_small = rfn.append_fields(
+    np_peak_small,
+    names='intensity',
+    data=intensity,
+    dtypes='f8',
+    usemask=False
+)
+
+np_peak_small = rfn.append_fields(
+    np_peak_small,
+    names='intensity_sigma',
+    data=error,
+    dtypes='f8',
+    usemask=False
+)
+l_ind_non_zero = []
+for i_hh, hh in enumerate(np_peak_small):
+    if hh['intensity'] > 0.:
+        l_ind_non_zero.append(i_hh)
+
+np_peak_int = np_peak_small[l_ind_non_zero]
+for hh in np_peak_int:
+    print(f"{hh['h']:4.0f} {hh['k']:4.0f} {hh['l']:4.0f} {hh['intensity']:10.2f} {hh['intensity_sigma']:10.2f}")
+
+np_peak_small
+print(intensity)
+np_peak[l_ind]
+np_peak[l_peak_problem_ind]
+
+numpy.degrees(np_peak['gamma'])
+    
+np_peak.dtype.names
+hkl = numpy.column_stack([np_peak['h'], np_peak['k'], np_peak['l']]).T
+for h,k,l in np_peak[['h','k','l']]:
+    print(h, k, l)
+
+np_peak = rfn.append_fields(
+    np_peak,
+    names='nu_deg',
+    data=numpy.rad2deg(np_peak['nu']),
+    dtypes='f8',
+    usemask=False
+)
 
 
 d_param = {
     'np_gamma': peaks_tgn.coords['event_gamma'].to(unit='rad').values,
     'np_nu': peaks_tgn.coords['event_nu'].to(unit='rad').values,
     'np_toa': peaks_tgn.coords['toa'].to(unit='ms').values,
-    
 }
+
 d_param['np_r'] = numpy.ones_like(d_param['np_gamma'])
 
 def calc_detector_event_position_global(detector_position, detector_event_position):
@@ -95,7 +246,6 @@ def calc_detector_event_position_global(detector_position, detector_event_positi
     return detector_event_position_global
 
 d_param['detector_position'] = dg_magic['detector_a'].coords['position'].to(unit='m').value
-
 d_param['sample_omega'] = dg_magic['sample']['omega'].to(unit='rad').value
 d_param['sample_chi'] = dg_magic['sample']['chi'].to(unit='rad').value
 d_param['sample_phi'] = dg_magic['sample']['phi'].to(unit='rad').value
@@ -104,11 +254,6 @@ d_param['source_position'] = dg_magic['source_position'].to(unit='m').value
 d_param['tp_position'] = dg_magic['tp_position'].to(unit='m').value
 d_param['delta_t'] = 3
 d_param['delta_l'] = 0.1
-
-
-importlib.reload(np_cryst_functions)
-importlib.reload(operations_with_da)
-importlib.reload(magic_graphs)
 
 
 np_cryst_functions.np_graph_qvec['event_position_global'] = calc_detector_event_position_global
@@ -122,12 +267,35 @@ aliases = {
     'toa_ms':'np_toa',
     'delta_t_ms': 'delta_t',
 }
-resolver = ParameterResolver(
-    np_cryst_functions.np_graph_qvec, d_param, aliases
-)
+
+d_param['delta_t'] = 30
+
+def calc_chi_sq_lt(x):
+    d_param['delta_t'] = x[0]
+    d_param['delta_l'] = x[1]
 
 
-d_out = resolver.resolve(('q_unrot', ), force_recompute=True, verbose=True)
+    resolver1 = resolver.ParameterResolver(
+        np_cryst_functions.np_graph_qvec, d_param, aliases
+    )
+
+    d_out = resolver1.resolve(('q_unrot', ), force_recompute=True, verbose=True)
+
+    euler_angles = numpy.zeros((3,), dtype=float)
+    unit_cell_parameters = numpy.array([2.890600,9.802400,12.580400,0.5*numpy.pi,0.5*numpy.pi,0.5*numpy.pi], dtype=float)
+
+
+    ucp, ea, ub_matrix, res = get_ub.get_euler_opt_by_qvec(
+        unit_cell_parameters, d_out['q_unrot'], 0.1, euler_angles, singony='ortho',
+        refine_euler_angles=False, refine_unit_cell_parameters=False, 
+        constraint_volume=True, minimization_basinhopping=False,
+    )
+    return res['fun']
+
+x0 = [3, 0.1]
+
+res = scipy.optimize.minimize(calc_chi_sq_lt, x0)
+res
 
 fig = plt.figure()
 ax = fig.add_subplot(projection='3d')
@@ -139,25 +307,9 @@ ax.scatter(d_out['q_unrot'][0],d_out['q_unrot'][1],d_out['q_unrot'][2])
 ax.view_init(elev=90, azim=0) 
 fig
 
-resolver.params.keys()
 
-resolver.params['tof_ms']
-
-resolver.params['wavelength']
-
-euler_angles = numpy.zeros((3,), dtype=float)
-
-importlib.reload(get_ub)
-
-unit_cell_parameters = numpy.array([3.76,1.45,11.7,0.5*numpy.pi,0.5*numpy.pi,0.5*numpy.pi], dtype=float)
-
-unit_cell_parameters = ucp
-ucp, ea, ub_matrix, res = get_ub.get_euler_opt(
-    unit_cell_parameters, d_out['q_unrot'], 0.1, euler_angles, singony='ortho',
-    refine_euler_angles=True, refine_unit_cell_parameters=True, 
-    constraint_volume=True, minimization_basinhopping=True,
-)
 print(ucp)
+print(ea)
 print(res)
 np_hkl = numpy.linalg.inv(ub_matrix) @ d_out['q_unrot']
 
