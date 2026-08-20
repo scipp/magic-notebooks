@@ -297,7 +297,7 @@ def replace_detector_event(
         replace_dataset(
             det_group_rotation['value'],
             'value',
-            np.array([data_detector['detector_rotation_value'].value,], dtype=float),
+            np.array([data_detector['detector_rotation_value'].to(unit='deg').value,], dtype=float),
         )
         replace_dataset(
             det_group_rotation['value'],
@@ -349,7 +349,7 @@ def replace_sample_information(
         replace_dataset(
             f['entry/instrument/sample_stick_rotation/value'], 
             name="value",
-            values=np.array([dg_sample['omega'].value, ], dtype=float),
+            values=np.array([dg_sample['omega'].to(unit='deg').value, ], dtype=float),
         )
         replace_dataset(
             f['entry/instrument/sample_stick_rotation/value'], 
@@ -365,7 +365,7 @@ if __name__ == '__main__':
     outfile = directory_path + "/mccode.nxs"
 
     mcstas_data_file = "/Users/iuriikibalin/Documents/files/Areas/ESS/McStas_Simulation_MAGiC/powder_Ge_10/mccode.h5"
-    template_coda_file = 'coda_magic_999999_00016485.hdf'
+    template_coda_file = '/Users/iuriikibalin/Documents/files/Areas/ESS/MAGiC_CODA/coda_magic_999999_00016485.hdf'
     outfile = "/Users/iuriikibalin/Repositories/magic-notebooks/mccode.nxs"
     
     number_event_detector_a = 100000
