@@ -2,8 +2,15 @@ import numpy
 import scipp as sc
 import tof
 
-def model_MAGiC(psc_nu=154, psc_opening_angle=105, wavelength_band_min:float=0.5, pulses:int=1, neutrons:int=1_000_000):
-    psc_nu_allowed = [14,28,70,112, 154]
+def model_MAGiC(
+    psc_nu: float = 154,
+    psc_opening_angle: float = 105,
+    bc_nu: float = 14,
+    wavelength_band_min: float = 0.5,
+    pulses: int = 1,
+    neutrons: int = 1_000_000,
+):
+    psc_nu_allowed = [7, 14, 28, 70, 112, 154]
     if not (psc_nu in psc_nu_allowed):
         np_hh = numpy.abs(numpy.array(psc_nu_allowed) - psc_nu)
         psc_nu = psc_nu_allowed[numpy.argmin(np_hh)]
@@ -22,9 +29,9 @@ def model_MAGiC(psc_nu=154, psc_opening_angle=105, wavelength_band_min:float=0.5
     bm_bunker_pos_1 = 7.823
     bm_bunker_pos_2 = 7.823
     bc_pos = 79.9
-    bm_cave_pos = 157.903 
-    # sample_pos = 159.403 
-    detector_pos = 160.403 
+    bm_cave_pos = 157.903
+    # sample_pos = 159.403
+    detector_pos = 160.403
 
 
     psc_slit_a = 8.6
@@ -32,7 +39,7 @@ def model_MAGiC(psc_nu=154, psc_opening_angle=105, wavelength_band_min:float=0.5
     sc_slit = 20.6
     sc_nu = 14
     bc_slit = 180
-    bc_nu = 14
+    # bc_nu = 14
 
 
     if psc_opening_angle <= psc_slit_a:
@@ -43,7 +50,6 @@ def model_MAGiC(psc_nu=154, psc_opening_angle=105, wavelength_band_min:float=0.5
         psc_opening_angle = psc_slit_b
         i_slit = 1
         raise UserWarning(f"PSC opening angle exceeds maximum value. Set to maximum ({psc_slit_b} deg.).")
-
 
     sc_phase = wavelength_band_min * sc_pos / 3956 * sc_nu * 360 + 0.5*sc_slit + detla_t23 * sc_nu * 360
     bc_phase = wavelength_band_min * bc_pos / 3956 * bc_nu * 360 + 0.5*bc_slit + detla_t23 * bc_nu * 360
