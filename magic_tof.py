@@ -21,7 +21,7 @@ def model_MAGiC(
     meter = sc.Unit('m')
     detla_t23 = 0.5*2.5 *0.001 #seconds
 
-    source = tof.Source(facility='ess', neutrons=neutrons, pulses=pulses)
+    source = tof.Source(facility='ess-magic', neutrons=neutrons, pulses=pulses)
 
     psc1_pos = 6.229
     psc2_pos = 6.244
