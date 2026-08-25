@@ -1,2 +1,4 @@
 ipyfilechooser>=0.6.0
 scikit-image
+cryspy
+tof
